@@ -19,11 +19,27 @@ export type ProtectedResource = {
  * its API accepts, so nothing about the flow is hard-coded to one deployment.
  */
 export async function discoverApiResource(origin: string): Promise<ProtectedResource> {
-  const body = await getJson<{
+  const workspace = normalizeOrigin(origin);
+  let body: {
     resource?: string;
     authorization_servers?: string[];
     scopes_supported?: string[];
-  }>(`${normalizeOrigin(origin)}/.well-known/oauth-protected-resource/api`);
+  };
+  try {
+    body = await getJson(`${workspace}/.well-known/oauth-protected-resource/api`);
+  } catch (cause) {
+    // A workspace that predates terminal sign-in has no such route, so its
+    // single-page app answers the request with 200 and an HTML document. That
+    // is the overwhelmingly likely reason to land here, and saying so is more
+    // use than reporting whatever the parser made of the markup.
+    if (cause instanceof NotJsonError || cause instanceof NotFoundError) {
+      throw new Error(
+        `${workspace} does not offer terminal sign-in. Update the workspace to a version ` +
+          "that serves /.well-known/oauth-protected-resource/api, then run login again."
+      );
+    }
+    throw cause;
+  }
   if (!body.resource || !body.authorization_servers?.length) {
     throw new Error("This workspace does not advertise an API resource to authorize against.");
   }
@@ -58,10 +74,34 @@ export async function discoverAuthorizationServer(issuer: string): Promise<Autho
   };
 }
 
+export class NotJsonError extends Error {
+  constructor(url: string) {
+    super(`${url} did not answer with JSON.`);
+    this.name = "NotJsonError";
+  }
+}
+
+export class NotFoundError extends Error {
+  constructor(url: string) {
+    super(`${url} was not found.`);
+    this.name = "NotFoundError";
+  }
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { headers: { accept: "application/json" } });
-  if (!response.ok) {
-    throw new Error(`${url} responded ${response.status}.`);
+  if (response.status === 404) throw new NotFoundError(url);
+  if (!response.ok) throw new Error(`${url} responded ${response.status}.`);
+
+  // A single-page app happily answers any unknown path with 200 and an HTML
+  // document, so a successful status is not evidence that this endpoint exists.
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!/^application\/(?:[\w.+-]+\+)?json\b/i.test(contentType)) {
+    throw new NotJsonError(url);
   }
-  return (await response.json()) as T;
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new NotJsonError(url);
+  }
 }
