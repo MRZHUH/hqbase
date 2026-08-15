@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { accessibleMailboxIds, requireMailboxAccess } from "../../auth/mailbox-access";
+import { accessibleMailboxScope, requireMailboxAccess } from "../../auth/mailbox-access";
 import { requireAuthContext } from "../../auth/session";
 import type { HonoApp } from "../../lib/env";
 import { parseWith } from "../../lib/validation";
@@ -20,7 +20,7 @@ const actionBodySchema = z.object({ folder: folderSchema });
 
 conversationRoutes.get("/", async (c) => {
   const auth = await requireAuthContext(c.env, c.req.raw);
-  const mailboxIds = await accessibleMailboxIds(c.env.DB, auth.user.id, auth.user.role, "read");
+  const scope = await accessibleMailboxScope(c.env.DB, auth.user.id, auth.user.role, "read");
   const folder = parseWith(folderSchema.optional(), c.req.query("folder"));
   return c.json(
     await listConversationPage(c.env.DB, {
@@ -28,7 +28,7 @@ conversationRoutes.get("/", async (c) => {
       folder,
       mailboxId: c.req.query("mailboxId"),
       search: c.req.query("search"),
-      mailboxIds
+      scope
     })
   );
 });
@@ -44,7 +44,7 @@ for (const action of actions) {
       await getMessageMailboxId(c.env.DB, c.req.param("id")),
       requiredAccess
     );
-    const mailboxIds = await accessibleMailboxIds(
+    const scope = await accessibleMailboxScope(
       c.env.DB,
       auth.user.id,
       auth.user.role,
@@ -55,8 +55,8 @@ for (const action of actions) {
       await updateConversationAction(c.env.DB, {
         action,
         activeFolder: body.folder,
-        mailboxIds,
-        messageId: c.req.param("id")
+        messageId: c.req.param("id"),
+        scope
       })
     );
   });

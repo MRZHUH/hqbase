@@ -16,18 +16,20 @@ vi.mock("web-push", () => {
     }
   };
 });
-vi.mock("@worker/auth/mailbox-access", () => ({ accessibleMailboxIds: vi.fn() }));
+vi.mock("@worker/auth/mailbox-access", () => ({ accessibleMailboxScope: vi.fn() }));
 vi.mock("@worker/features/notifications/queries", () => ({
   countUnreadMessages: vi.fn(),
+  listPushSubscriptionsForCatchall: vi.fn(),
   listPushSubscriptionsForMailbox: vi.fn(),
   markPushSubscriptionSuccessful: vi.fn(),
   removePushSubscriptionsById: vi.fn()
 }));
 
-import { accessibleMailboxIds } from "@worker/auth/mailbox-access";
+import { accessibleMailboxScope } from "@worker/auth/mailbox-access";
 import { notifyInboundMessage } from "@worker/features/notifications/delivery";
 import {
   countUnreadMessages,
+  listPushSubscriptionsForCatchall,
   listPushSubscriptionsForMailbox,
   markPushSubscriptionSuccessful,
   removePushSubscriptionsById
@@ -62,7 +64,10 @@ const env = {
 describe("push delivery", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(accessibleMailboxIds).mockResolvedValue(["mbx_1"]);
+    vi.mocked(accessibleMailboxScope).mockResolvedValue({
+      includeCatchall: false,
+      mailboxIds: ["mbx_1"]
+    });
     vi.mocked(countUnreadMessages).mockResolvedValue({
       catchall: 1,
       inbox: 2,
@@ -125,15 +130,69 @@ describe("push delivery", () => {
   });
 
   it("rechecks live mailbox access before sending", async () => {
-    vi.mocked(accessibleMailboxIds).mockResolvedValue([]);
+    vi.mocked(accessibleMailboxScope).mockResolvedValue({ includeCatchall: false, mailboxIds: [] });
     await notifyInboundMessage(env, message);
     expect(webpush.sendNotification).not.toHaveBeenCalled();
     expect(countUnreadMessages).not.toHaveBeenCalled();
   });
 
-  it("does nothing when the stored message has no mailbox", async () => {
-    await notifyInboundMessage(env, { ...message, mailboxId: null });
+  it("notifies catch-all subscribers for a message that matched no mailbox", async () => {
+    vi.mocked(accessibleMailboxScope).mockResolvedValue({
+      includeCatchall: true,
+      mailboxIds: []
+    });
+    vi.mocked(listPushSubscriptionsForCatchall).mockResolvedValue([
+      {
+        id: "push_catchall",
+        user_id: "usr_owner",
+        endpoint: "https://push.example/owner",
+        p256dh_key: "p256dh",
+        auth_key: "auth",
+        expiration_time: null,
+        role: "owner"
+      }
+    ]);
+    vi.mocked(webpush.sendNotification).mockResolvedValue({
+      body: "",
+      headers: {},
+      statusCode: 201
+    });
+
+    await notifyInboundMessage(env, { ...message, folder: "catchall", mailboxId: null });
+
     expect(listPushSubscriptionsForMailbox).not.toHaveBeenCalled();
+    expect(webpush.sendNotification).toHaveBeenCalledTimes(1);
+    expect(
+      JSON.parse(vi.mocked(webpush.sendNotification).mock.calls[0]?.[1] as string)
+    ).toMatchObject({ url: "/catch-all/msg_1" });
+  });
+
+  it("does not notify a subscriber whose scope excludes catch-all", async () => {
+    vi.mocked(listPushSubscriptionsForCatchall).mockResolvedValue([
+      {
+        id: "push_member",
+        user_id: "usr_member",
+        endpoint: "https://push.example/member",
+        p256dh_key: "p256dh",
+        auth_key: "auth",
+        expiration_time: null,
+        role: "member"
+      }
+    ]);
+
+    await notifyInboundMessage(env, { ...message, folder: "catchall", mailboxId: null });
+
+    expect(webpush.sendNotification).not.toHaveBeenCalled();
+    expect(countUnreadMessages).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when push is not configured", async () => {
+    await notifyInboundMessage(
+      { ...env, VAPID_PRIVATE_KEY: undefined } as unknown as WorkerEnv,
+      message
+    );
+    expect(listPushSubscriptionsForMailbox).not.toHaveBeenCalled();
+    expect(listPushSubscriptionsForCatchall).not.toHaveBeenCalled();
     expect(webpush.sendNotification).not.toHaveBeenCalled();
   });
 });

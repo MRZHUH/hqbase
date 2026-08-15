@@ -1,11 +1,12 @@
 import webpush from "web-push";
 
-import { accessibleMailboxIds } from "../../auth/mailbox-access";
+import { accessibleMailboxScope } from "../../auth/mailbox-access";
 import type { WorkerEnv } from "../../lib/env";
 import type { WorkspaceRole } from "../../lib/validation";
 import type { MessageSummary } from "../messages/types";
 import {
   countUnreadMessages,
+  listPushSubscriptionsForCatchall,
   listPushSubscriptionsForMailbox,
   markPushSubscriptionSuccessful,
   removePushSubscriptionsById
@@ -14,11 +15,13 @@ import type { PushSubscriptionRow } from "./types";
 
 export async function notifyInboundMessage(env: WorkerEnv, message: MessageSummary): Promise<void> {
   const mailboxId = message.mailboxId;
-  if (!mailboxId || !env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
     return;
   }
 
-  const subscriptions = await listPushSubscriptionsForMailbox(env.DB, mailboxId);
+  const subscriptions = mailboxId
+    ? await listPushSubscriptionsForMailbox(env.DB, mailboxId)
+    : await listPushSubscriptionsForCatchall(env.DB);
   if (subscriptions.length === 0) return;
 
   webpush.setVapidDetails(
@@ -33,9 +36,10 @@ export async function notifyInboundMessage(env: WorkerEnv, message: MessageSumma
     [...byUser.entries()].map(async ([userId, userSubscriptions]) => {
       const role = workspaceRole(userSubscriptions[0]?.role);
       if (!role) return;
-      const mailboxIds = await accessibleMailboxIds(env.DB, userId, role, "read");
-      if (!mailboxIds.includes(mailboxId)) return;
-      const unread = await countUnreadMessages(env.DB, mailboxIds);
+      const scope = await accessibleMailboxScope(env.DB, userId, role, "read");
+      const allowed = mailboxId ? scope.mailboxIds.includes(mailboxId) : scope.includeCatchall;
+      if (!allowed) return;
+      const unread = await countUnreadMessages(env.DB, scope);
       const payload = JSON.stringify({
         tag: `hqbase-thread-${message.threadId}`,
         unreadCount: unread.total,

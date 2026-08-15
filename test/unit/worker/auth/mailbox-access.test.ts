@@ -1,7 +1,9 @@
 import {
   accessAllows,
   accessibleMailboxIds,
+  canAccessCatchall,
   mailboxAccess,
+  mailboxScopeSql,
   requireMailboxAccess
 } from "@worker/auth/mailbox-access";
 import { describe, expect, it } from "vitest";
@@ -40,6 +42,37 @@ describe("mailbox access levels", () => {
     await expect(
       requireMailboxAccess(db, "member", "member", "mbx_1", "agent")
     ).rejects.toMatchObject({ code: "MAILBOX_FORBIDDEN", status: 403 });
+  });
+
+  it("treats catch-all as workspace scoped rather than mailbox scoped", async () => {
+    expect(canAccessCatchall("owner")).toBe(true);
+    expect(canAccessCatchall("admin")).toBe(false);
+    expect(canAccessCatchall("member")).toBe(false);
+
+    await expect(requireMailboxAccess(db, "owner", "owner", null, "manager")).resolves.toBe(
+      "manager"
+    );
+    await expect(requireMailboxAccess(db, "member", "member", null, "read")).rejects.toMatchObject({
+      code: "MAILBOX_FORBIDDEN",
+      status: 403
+    });
+  });
+
+  it("matches catch-all rows with IS NULL, which mailbox_id IN (...) can never do", () => {
+    expect(
+      mailboxScopeSql({ includeCatchall: false, mailboxIds: ["mbx_1"] }, "mailbox_id")
+    ).toEqual({ params: ["mbx_1"], sql: "(mailbox_id IN (?))" });
+    expect(mailboxScopeSql({ includeCatchall: true, mailboxIds: ["mbx_1"] }, "mailbox_id")).toEqual(
+      {
+        params: ["mbx_1"],
+        sql: "(mailbox_id IN (?) OR mailbox_id IS NULL)"
+      }
+    );
+    expect(mailboxScopeSql({ includeCatchall: true, mailboxIds: [] }, "mailbox_id")).toEqual({
+      params: [],
+      sql: "(mailbox_id IS NULL)"
+    });
+    expect(mailboxScopeSql({ includeCatchall: false, mailboxIds: [] }, "mailbox_id")).toBeNull();
   });
 
   it("lists only mailbox IDs satisfying the required level", async () => {

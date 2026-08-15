@@ -1,3 +1,5 @@
+import type { MailboxScope } from "../../auth/mailbox-access";
+import { mailboxScopeSql } from "../../auth/mailbox-access";
 import { newId, nowIso } from "../../db/client";
 import { AppError } from "../../lib/errors";
 import type { MessageAction } from "./actions";
@@ -22,7 +24,7 @@ export type ListMessageFilters = {
   limit?: number | undefined;
   mailboxId?: string | undefined;
   search?: string | undefined;
-  mailboxIds?: string[] | undefined;
+  scope: MailboxScope;
 };
 
 export async function insertMessage(
@@ -121,11 +123,10 @@ export async function listMessages(
   const where: string[] = [];
   const params: Array<string | number> = [];
 
-  if (filters.mailboxIds) {
-    if (filters.mailboxIds.length === 0) return [];
-    where.push(`mailbox_id IN (${filters.mailboxIds.map(() => "?").join(", ")})`);
-    params.push(...filters.mailboxIds);
-  }
+  const scope = mailboxScopeSql(filters.scope, "mailbox_id");
+  if (!scope) return [];
+  where.push(scope.sql);
+  params.push(...scope.params);
 
   if (filters.folder) {
     where.push("folder = ?");
@@ -168,17 +169,18 @@ export async function getMessageDetail(db: D1Database, id: string): Promise<Mess
 export async function listThreadMessages(
   db: D1Database,
   threadId: string,
-  mailboxIds: string[]
+  scope: MailboxScope
 ): Promise<MessageDetail[]> {
-  if (mailboxIds.length === 0) return [];
+  const scopeSql = mailboxScopeSql(scope, "mailbox_id");
+  if (!scopeSql) return [];
   const result = await db
     .prepare(
       `${messageSelect}
-       WHERE thread_id = ? AND mailbox_id IN (${mailboxIds.map(() => "?").join(", ")})
+       WHERE thread_id = ? AND ${scopeSql.sql}
        ORDER BY COALESCE(received_at, sent_at, created_at) ASC
        LIMIT 100`
     )
-    .bind(threadId, ...mailboxIds)
+    .bind(threadId, ...scopeSql.params)
     .all<MessageRow>();
   return Promise.all(result.results.map((row) => mapMessageDetail(db, row)));
 }

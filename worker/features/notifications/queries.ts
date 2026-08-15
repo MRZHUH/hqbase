@@ -1,11 +1,14 @@
+import type { MailboxScope } from "../../auth/mailbox-access";
+import { mailboxScopeSql } from "../../auth/mailbox-access";
 import { newId, nowIso } from "../../db/client";
 import type { PushSubscriptionInput, PushSubscriptionRow, UnreadCounts } from "./types";
 
 export async function countUnreadMessages(
   db: D1Database,
-  mailboxIds: string[]
+  scope: MailboxScope
 ): Promise<UnreadCounts> {
-  if (mailboxIds.length === 0) {
+  const scopeSql = mailboxScopeSql(scope, "mailbox_id");
+  if (!scopeSql) {
     return { catchall: 0, inbox: 0, inboxByMailbox: {}, total: 0 };
   }
 
@@ -16,16 +19,16 @@ export async function countUnreadMessages(
        WHERE direction = 'inbound'
          AND read_at IS NULL
          AND folder IN ('inbox', 'catchall')
-         AND mailbox_id IN (${mailboxIds.map(() => "?").join(", ")})
+         AND ${scopeSql.sql}
        GROUP BY mailbox_id, folder`
     )
-    .bind(...mailboxIds)
-    .all<{ folder: "catchall" | "inbox"; mailbox_id: string; unread_count: number }>();
+    .bind(...scopeSql.params)
+    .all<{ folder: "catchall" | "inbox"; mailbox_id: string | null; unread_count: number }>();
   const inboxByMailbox: Record<string, number> = {};
   let inbox = 0;
   let catchall = 0;
   for (const row of result.results) {
-    if (row.folder === "inbox") {
+    if (row.folder === "inbox" && row.mailbox_id !== null) {
       inbox += row.unread_count;
       inboxByMailbox[row.mailbox_id] = row.unread_count;
     } else {
@@ -37,19 +40,20 @@ export async function countUnreadMessages(
 
 export async function latestInboundMessageId(
   db: D1Database,
-  mailboxIds: string[]
+  scope: MailboxScope
 ): Promise<string | null> {
-  if (mailboxIds.length === 0) return null;
+  const scopeSql = mailboxScopeSql(scope, "mailbox_id");
+  if (!scopeSql) return null;
   const row = await db
     .prepare(
       `SELECT id
        FROM messages
        WHERE direction = 'inbound'
-         AND mailbox_id IN (${mailboxIds.map(() => "?").join(", ")})
+         AND ${scopeSql.sql}
        ORDER BY created_at DESC, id DESC
        LIMIT 1`
     )
-    .bind(...mailboxIds)
+    .bind(...scopeSql.params)
     .first<{ id: string }>();
   return row?.id ?? null;
 }
@@ -119,6 +123,27 @@ export async function listPushSubscriptionsForMailbox(
          )`
     )
     .bind(mailboxId)
+    .all<PushSubscriptionRow>();
+  return result.results;
+}
+
+/**
+ * Catch-all messages belong to no mailbox, so there are no grants to join against. This is a
+ * coarse pre-filter that mirrors `canAccessCatchall`; delivery re-checks each user's scope before
+ * sending, and that check remains the authoritative one.
+ */
+export async function listPushSubscriptionsForCatchall(
+  db: D1Database
+): Promise<PushSubscriptionRow[]> {
+  const result = await db
+    .prepare(
+      `SELECT subscription.id, subscription.user_id, subscription.endpoint,
+         subscription.p256dh_key, subscription.auth_key, subscription.expiration_time, user.role
+       FROM push_subscriptions subscription
+       JOIN "user" user ON user.id = subscription.user_id
+       WHERE COALESCE(user.banned, 0) = 0
+         AND user.role = 'owner'`
+    )
     .all<PushSubscriptionRow>();
   return result.results;
 }

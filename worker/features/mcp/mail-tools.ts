@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { accessibleMailboxIds, requireMailboxAccess } from "../../auth/mailbox-access";
+import { accessibleMailboxScope, requireMailboxAccess } from "../../auth/mailbox-access";
 import type { WorkerEnv } from "../../lib/env";
 import { AppError } from "../../lib/errors";
 import { recordAudit } from "../audit/service";
@@ -62,7 +62,7 @@ function registerReadTools(server: McpServer, env: WorkerEnv, principal: McpPrin
     },
     (input) =>
       toolResult(async () => {
-        const mailboxIds = await accessibleMailboxIds(
+        const scope = await accessibleMailboxScope(
           env.DB,
           principal.userId,
           principal.role,
@@ -71,7 +71,7 @@ function registerReadTools(server: McpServer, env: WorkerEnv, principal: McpPrin
         return listMessages(env.DB, {
           folder: input.folder,
           mailboxId: input.mailboxId,
-          mailboxIds,
+          scope,
           search: input.query,
           limit: input.limit
         });
@@ -92,7 +92,7 @@ function registerReadTools(server: McpServer, env: WorkerEnv, principal: McpPrin
     },
     (input) =>
       toolResult(async () => {
-        const mailboxIds = await accessibleMailboxIds(
+        const scope = await accessibleMailboxScope(
           env.DB,
           principal.userId,
           principal.role,
@@ -101,7 +101,7 @@ function registerReadTools(server: McpServer, env: WorkerEnv, principal: McpPrin
         return listConversations(env.DB, {
           folder: input.folder,
           mailboxId: input.mailboxId,
-          mailboxIds,
+          scope,
           search: input.query
         });
       })
@@ -127,14 +127,14 @@ function registerReadTools(server: McpServer, env: WorkerEnv, principal: McpPrin
     ({ messageId }) =>
       toolResult(async () => {
         const message = await readMessage(env, principal, messageId);
-        const mailboxIds = await accessibleMailboxIds(
+        const scope = await accessibleMailboxScope(
           env.DB,
           principal.userId,
           principal.role,
           "read"
         );
         return Promise.all(
-          (await listThreadMessages(env.DB, message.threadId, mailboxIds)).map(safeMessage)
+          (await listThreadMessages(env.DB, message.threadId, scope)).map(safeMessage)
         );
       })
   );
@@ -215,7 +215,7 @@ function registerWriteTools(server: McpServer, env: WorkerEnv, principal: McpPri
           await getMessageMailboxId(env.DB, messageId),
           "agent"
         );
-        const mailboxIds = await accessibleMailboxIds(
+        const scope = await accessibleMailboxScope(
           env.DB,
           principal.userId,
           principal.role,
@@ -224,8 +224,8 @@ function registerWriteTools(server: McpServer, env: WorkerEnv, principal: McpPri
         const result = await updateConversationAction(env.DB, {
           action,
           activeFolder,
-          mailboxIds,
-          messageId
+          messageId,
+          scope
         });
         await recordMutation(
           env,

@@ -1,3 +1,5 @@
+import type { MailboxScope } from "../../auth/mailbox-access";
+import { mailboxScopeSql } from "../../auth/mailbox-access";
 import { nowIso } from "../../db/client";
 import { AppError } from "../../lib/errors";
 
@@ -14,7 +16,7 @@ export type ListConversationFilters = {
   folder?: ConversationFolder | undefined;
   limit?: number | undefined;
   mailboxId?: string | undefined;
-  mailboxIds: string[];
+  scope: MailboxScope;
   search?: string | undefined;
 };
 
@@ -33,7 +35,8 @@ export async function listConversationPage(
   db: D1Database,
   filters: ListConversationFilters
 ): Promise<ConversationPage> {
-  if (filters.mailboxIds.length === 0) {
+  const scope = mailboxScopeSql(filters.scope, "messages.mailbox_id");
+  if (!scope) {
     return {
       conversations: [],
       nextCursor: null,
@@ -41,8 +44,8 @@ export async function listConversationPage(
     };
   }
 
-  const accessibleWhere = `messages.mailbox_id IN (${filters.mailboxIds.map(() => "?").join(", ")})`;
-  const params: Array<string | number> = [...filters.mailboxIds];
+  const accessibleWhere = scope.sql;
+  const params: Array<string | number> = [...scope.params];
 
   const eligibilityWhere: string[] = [];
   if (filters.mailboxId) {
@@ -142,8 +145,8 @@ export async function updateConversationAction(
   input: {
     action: MessageAction;
     activeFolder: ConversationFolder;
-    mailboxIds: string[];
     messageId: string;
+    scope: MailboxScope;
   }
 ): Promise<{ affected: number; threadId: string }> {
   const selected = await db
@@ -153,14 +156,14 @@ export async function updateConversationAction(
   if (!selected) {
     throw new AppError("MESSAGE_NOT_FOUND", "Message not found.", 404);
   }
-  if (input.mailboxIds.length === 0) {
+  const scope = mailboxScopeSql(input.scope, "mailbox_id");
+  if (!scope) {
     throw new AppError("MAILBOX_FORBIDDEN", "You do not have access to this mailbox.", 403);
   }
 
   const timestamp = nowIso();
-  const mailboxPlaceholders = input.mailboxIds.map(() => "?").join(", ");
-  const where = [`thread_id = ?`, `mailbox_id IN (${mailboxPlaceholders})`];
-  const bindings: Array<string | null> = [selected.thread_id, ...input.mailboxIds];
+  const where = [`thread_id = ?`, scope.sql];
+  const bindings: Array<string | null> = [selected.thread_id, ...scope.params];
   let set: string;
 
   switch (input.action) {
