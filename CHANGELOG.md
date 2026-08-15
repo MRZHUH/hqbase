@@ -9,6 +9,14 @@
   mail routes, deny-by-default everywhere else.
 - Add Settings › Applications, where a user can see every application they authorized, the scopes it
   holds, when it was last used, and revoke it.
+- Show the whole message envelope in the terminal reader — sender, every recipient, carbon copies,
+  absolute and relative dates, and each attachment — and draw image attachments inline on terminals
+  that support it, describing them in text everywhere else.
+- Distinguish read from unread conversations by weight and colour, act on a conversation without
+  opening it through a menu on enter, and mark everything currently listed as read behind a
+  confirmation.
+- Measure every terminal line in display columns, so mailboxes in Chinese, Japanese, or Korean
+  render without wrapping or corrupting the frame.
 
 ## 1.0.1
 
