@@ -54,6 +54,8 @@ export type MessageAttachment = {
   filename: string;
   contentType: string;
   sizeBytes: number;
+  /** Set when the message referenced this attachment inline, by content id. */
+  contentId: string | null;
 };
 
 export type MessageDetail = MessageSummary & {

@@ -78,9 +78,47 @@ export function relativeTime(iso: string, now = Date.now()): string {
   return new Date(at).toISOString().slice(0, 10);
 }
 
+/** An absolute local timestamp, for the reader where precision matters. */
+export function absoluteTime(iso: string): string {
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return "unknown date";
+  const date = new Date(at);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "unknown size";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
 export function pad(value: string, width: number): string {
   if (width <= 0) return "";
   return truncate(value, width).padEnd(width, " ");
+}
+
+/**
+ * Clips to the width without touching the text otherwise.
+ *
+ * `truncate` collapses whitespace, which is what a one-line table cell wants and
+ * exactly what the reader must not have: it would eat header alignment and the
+ * indentation of an attachment list.
+ */
+export function clip(value: string, width: number): string {
+  if (value.length <= width) return value;
+  if (width <= 1) return value.slice(0, Math.max(width, 0));
+  return `${value.slice(0, width - 1)}…`;
 }
 
 export function truncate(value: string, width: number): string {

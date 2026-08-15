@@ -164,6 +164,60 @@ full message bodies, and SHALL merge those results into the list.
 - **WHEN** the deep-search request fails or times out
 - **THEN** the locally filtered list stays on screen and the status line reports the failure
 
+### Requirement: The interface always shows the keys for where you are
+
+The bottom line of the screen SHALL list the key bindings available in the current view, so no
+binding has to be memorised or looked up.
+
+#### Scenario: The key hints are always the last line
+
+- **WHEN** the interface is showing either the list or the reader
+- **THEN** the final line of the screen lists key bindings for that view, on its own line, never
+  sharing space with the workspace and cache status
+
+#### Scenario: The hints follow the view
+
+- **WHEN** the user opens a conversation
+- **THEN** the hints change to the reader's bindings, and the message-action keys appear only when
+  the connection is permitted to change message state
+
+#### Scenario: A narrow terminal drops hints whole
+
+- **WHEN** the terminal is too narrow for every hint
+- **THEN** hints are dropped from the right in full rather than one being cut mid-word, and the
+  binding that quits the client is always among those kept
+
+### Requirement: The arrows move in and out of a conversation
+
+The right arrow SHALL open the selected conversation and the left arrow SHALL leave whatever the
+user is in, so mail can be moved through one-handed. Neither arrow SHALL quit the client.
+
+#### Scenario: Right opens the conversation
+
+- **WHEN** the user presses the right arrow in the list
+- **THEN** the selected conversation opens, exactly as pressing enter does
+
+#### Scenario: Left leaves the reader
+
+- **WHEN** the user presses the left arrow while reading
+- **THEN** the list reappears with the same query, scroll offset, and selected row
+
+#### Scenario: Left clears the query in the list
+
+- **WHEN** the user presses the left arrow in the list with a non-empty query
+- **THEN** the query is cleared and the full cached list returns
+
+#### Scenario: Left never ends the session
+
+- **WHEN** the user presses the left arrow in the list with an empty query
+- **THEN** the client stays open and says which key quits
+
+#### Scenario: The query cursor keeps its own keys
+
+- **WHEN** the user moves within the text of the query line
+- **THEN** the cursor responds to the readline bindings for back, forward, start of line, and end of
+  line, because the arrows are spoken for
+
 ### Requirement: The client reads a conversation as a thread
 
 Selecting a conversation SHALL open a reader showing the thread's messages in chronological order
@@ -173,8 +227,21 @@ the selected row.
 #### Scenario: Opening a conversation shows the thread
 
 - **WHEN** the user opens the selected conversation
-- **THEN** the reader shows each permitted message in the thread with its sender, recipients, date,
-  attachment names, and plain-text body, scrollable within the terminal
+- **THEN** the reader shows each permitted message in the thread with its sender, every named
+  recipient, both an absolute and a relative date, its attachments, and its plain-text body,
+  scrollable within the terminal
+
+#### Scenario: Carbon copies are shown when present
+
+- **WHEN** a message carries carbon-copy or blind-carbon-copy recipients
+- **THEN** they are listed on their own labelled lines, and those lines are absent for a message
+  that carries none
+
+#### Scenario: What a message contains is stated
+
+- **WHEN** a message has attachments, has images among them, has a formatted part the terminal
+  cannot render, or is still unread
+- **THEN** the reader states each of those facts about the message
 
 #### Scenario: Returning preserves the search
 
@@ -185,6 +252,43 @@ the selected row.
 
 - **WHEN** a message has no plain-text body
 - **THEN** the reader shows the workspace-provided text rendering rather than an empty body
+
+### Requirement: The client shows images, or says why it cannot
+
+Image attachments SHALL be drawn in the reader when the terminal can draw them, and described in
+text when it cannot, so an image is never silently absent.
+
+#### Scenario: An image is drawn where it belongs
+
+- **WHEN** a message carries an image attachment and the terminal supports an inline-image protocol
+- **THEN** the image is drawn in the reader beneath the attachment it belongs to
+
+#### Scenario: A terminal that cannot draw gets words instead
+
+- **WHEN** the terminal supports no inline-image protocol, or supports one that cannot carry this
+  image's format
+- **THEN** the attachment line is followed by a statement that the image cannot be displayed here
+
+#### Scenario: A large image is not fetched at all
+
+- **WHEN** an image attachment is larger than the client's display limit
+- **THEN** the client does not download it and says that it is too large to display
+
+#### Scenario: Fetching is visible and failure is reported
+
+- **WHEN** an image is being fetched, or its fetch fails
+- **THEN** the reader says which of the two is the case rather than leaving the space blank
+
+#### Scenario: Drawing can be turned off
+
+- **WHEN** the operator disables image drawing
+- **THEN** every image is described in text, on every terminal
+
+#### Scenario: An image never overruns the screen
+
+- **WHEN** the terminal is too short to hold an image at its normal height
+- **THEN** the image is drawn smaller so that it fits, rather than being omitted or pushing the
+  interface off screen
 
 ### Requirement: The client changes message state
 

@@ -49,17 +49,61 @@ describe("typing", () => {
     expect(cleared.results).toHaveLength(sample.length);
   });
 
-  it("edits at the cursor", () => {
+  it("edits at the cursor, which moves on the readline keys", () => {
     let model = type(start(), "abc");
-    [model] = press(model, { kind: "left" });
+    [model] = press(model, { kind: "control", value: "b" });
     [model] = press(model, { kind: "char", value: "X" });
     expect(model.query).toBe("abXc");
     [model] = press(model, { kind: "backspace" });
     expect(model.query).toBe("abc");
   });
 
+  it("jumps the cursor to either end of the query", () => {
+    let model = type(start(), "abc");
+    [model] = press(model, { kind: "control", value: "a" });
+    expect(model.cursor).toBe(0);
+    [model] = press(model, { kind: "control", value: "e" });
+    expect(model.cursor).toBe(3);
+  });
+
   it("reports a filter it could not understand", () => {
     expect(type(start(), "bogus:x").invalidTerms).toEqual(["bogus:x"]);
+  });
+});
+
+describe("arrow keys enter and leave a conversation", () => {
+  it("opens the selected conversation on the right arrow", () => {
+    const [model, effects] = press(start(), { kind: "right" });
+    expect(model.screen).toBe("reader");
+    expect(effects).toEqual([{ type: "open", conversationId: "c1", threadId: "thr_c1" }]);
+  });
+
+  it("leaves the conversation on the left arrow", () => {
+    const [opened] = press(start(), { kind: "right" });
+    const [model] = press(opened, { kind: "left" });
+    expect(model.screen).toBe("list");
+    expect(model.reader).toBeNull();
+  });
+
+  it("clears the query on the left arrow in the list", () => {
+    const [model] = press(type(start(), "invoice"), { kind: "left" });
+    expect(model.query).toBe("");
+    expect(model.results).toHaveLength(sample.length);
+  });
+
+  it("never quits on the left arrow, it points at ctrl+c instead", () => {
+    const [model, effects] = press(start(), { kind: "left" });
+    expect(model.quitting).toBe(false);
+    expect(effects).toEqual([]);
+    expect(model.notice?.text).toContain("ctrl+c");
+  });
+
+  it("keeps the query and the selection when the right arrow round-trips", () => {
+    let model = type(start(), "invoice");
+    [model] = press(model, { kind: "right" });
+    [model] = press(model, { kind: "left" });
+    expect(model.query).toBe("invoice");
+    expect(model.results.map((r) => r.conversation.id)).toEqual(["c2"]);
   });
 });
 

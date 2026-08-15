@@ -22,11 +22,20 @@ function frame(state: Model): string {
   return render(state, { now });
 }
 
+function status(state: Model): string {
+  return frame(state).split("\n").at(-2) ?? "";
+}
+
+function keys(state: Model): string {
+  return frame(state).split("\n").at(-1) ?? "";
+}
+
 describe("render", () => {
-  it("puts the query on the first line and the status on the last", () => {
+  it("puts the query first, then status, then the key hints", () => {
     const lines = frame(model({ query: "invoice" })).split("\n");
     expect(lines[0]).toContain("invoice");
-    expect(lines.at(-1)).toContain("mail.example.com");
+    expect(lines.at(-2)).toContain("mail.example.com");
+    expect(lines.at(-1)).toContain("open");
   });
 
   it("always paints exactly as many lines as the terminal is tall", () => {
@@ -48,9 +57,8 @@ describe("render", () => {
   });
 
   it("reports the counts and the cache age", () => {
-    const status = frame(model()).split("\n").at(-1) ?? "";
-    expect(status).toContain("3/3 cached");
-    expect(status).toContain("synced 5m ago");
+    expect(status(model())).toContain("3/3 cached");
+    expect(status(model())).toContain("synced 5m ago");
   });
 
   it("says the cache is empty rather than showing a blank list", () => {
@@ -71,7 +79,7 @@ describe("render", () => {
       { type: "sync-finished", added: 2, updated: 0, truncated: false },
       now
     );
-    expect(frame(next).split("\n").at(-1)).toContain("2 new");
+    expect(status(next)).toContain("2 new");
   });
 
   it("says the workspace is unreachable", () => {
@@ -79,12 +87,33 @@ describe("render", () => {
     expect(frame(next)).toContain("Workspace unreachable.");
   });
 
-  it("renders a thread with senders, recipients, and bodies", () => {
-    const opened = openReader(model(), [message({ id: "m1", textBody: "First message body." })]);
+  it("renders a thread with full headers and the body", () => {
+    const opened = openReader(model(), [
+      message({
+        id: "m1",
+        textBody: "First message body.",
+        cc: ["manager@example.com"],
+        bcc: ["audit@example.com"]
+      })
+    ]);
     const painted = frame(opened);
-    expect(painted).toContain("alice@example.com");
-    expect(painted).toContain("to team@example.com");
+    expect(painted).toContain("From:  alice@example.com");
+    expect(painted).toContain("To:    team@example.com");
+    expect(painted).toContain("Cc:    manager@example.com");
+    expect(painted).toContain("Bcc:   audit@example.com");
+    expect(painted).toContain("Date:  ");
     expect(painted).toContain("First message body.");
+  });
+
+  it("omits Cc and Bcc when the message carries none", () => {
+    const painted = frame(openReader(model(), [message({ id: "m1" })]));
+    expect(painted).not.toContain("Cc:");
+    expect(painted).not.toContain("Bcc:");
+  });
+
+  it("shows both an absolute and a relative date", () => {
+    const painted = frame(openReader(model(), [message({ id: "m1" })]));
+    expect(painted).toMatch(/Date:\s+2026-08-15 \d\d:\d\d\s+\(1h ago\)/);
   });
 
   it("explains an HTML-only message instead of showing an empty body", () => {
@@ -99,7 +128,13 @@ describe("render", () => {
       message({
         id: "m1",
         attachments: [
-          { id: "a1", filename: "report.pdf", contentType: "application/pdf", sizeBytes: 10 }
+          {
+            id: "a1",
+            filename: "report.pdf",
+            contentType: "application/pdf",
+            sizeBytes: 10,
+            contentId: null
+          }
         ]
       })
     ]);
@@ -108,9 +143,59 @@ describe("render", () => {
 
   it("offers the action keys only when the connection can write", () => {
     const writable = openReader(model(), [message({ id: "m1" })]);
-    expect(frame(writable)).toContain("a archive");
+    expect(keys(writable)).toContain("a archive");
     const readOnly = openReader(model({ canWrite: false }), [message({ id: "m1" })]);
-    expect(frame(readOnly)).toContain("read-only");
+    expect(keys(readOnly)).not.toContain("a archive");
+    expect(status(readOnly)).toContain("read-only");
+  });
+
+  it("always ends with a key-hint line", () => {
+    expect(keys(model())).toContain("→ open");
+    expect(keys(model())).toContain("← clear");
+    expect(keys(model())).toContain("ctrl+c quit");
+  });
+
+  it("shows the reader's own keys once a conversation is open", () => {
+    const opened = openReader(model(), [message({ id: "m1" })]);
+    expect(keys(opened)).toContain("←/q back");
+    expect(keys(opened)).toContain("↑↓ scroll");
+  });
+
+  it("drops whole hints from the tail rather than truncating mid-word", () => {
+    const narrow = keys(model({ width: 24 }));
+    expect(narrow.length).toBeLessThanOrEqual(24);
+    expect(narrow).not.toContain("…");
+    expect(narrow).toContain("→ open");
+  });
+
+  it("keeps the key line even when a notice takes over the status line", () => {
+    const [next] = update(model(), { type: "offline", text: "Workspace unreachable." }, now);
+    expect(status(next)).toContain("Workspace unreachable.");
+    expect(keys(next)).toContain("ctrl+c quit");
+  });
+
+  it("draws an inline image inside the frame when the terminal supports it", () => {
+    const opened = openReader(model(), [
+      message({
+        id: "m1",
+        attachments: [
+          {
+            id: "a1",
+            filename: "chart.png",
+            contentType: "image/png",
+            sizeBytes: 2,
+            contentId: null
+          }
+        ]
+      })
+    ]);
+    const ready = {
+      ...opened,
+      height: 40,
+      images: { a1: { status: "ready" as const, base64: "aGk=", bytes: 2 } }
+    };
+    expect(render(ready, { now, protocol: "iterm" })).toContain("1337;File=inline=1");
+    expect(render(ready, { now, protocol: "none" })).toContain("cannot display images");
   });
 
   it("never renders a line wider than the terminal on a narrow screen", () => {

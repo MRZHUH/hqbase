@@ -52,6 +52,20 @@
 - [x] 6.6 Implement the non-interactive `search`, `sync`, `status`, `cache clear`, and `version` commands, and `cli.ts` dispatch
 - [x] 6.7 Unit-test the query parser, filters, fuzzy ranking, formatter, and the update reducer across every spec scenario
 
+## 8. Navigation, key hints, and rich message display
+
+- [x] 8.1 Add a dedicated key-hint line as the last row of the frame, context-sensitive to list or reader, with the quit binding pinned so a narrow terminal never drops it
+- [x] 8.2 Bind the right arrow to open a conversation and the left arrow to leave the reader or clear the query, never to quit
+- [x] 8.3 Move query-cursor movement to the readline bindings now that the arrows are spoken for
+- [x] 8.4 Rewrite the reader as row-counted blocks (`ui/reader.ts`) so a block taller than one row windows correctly
+- [x] 8.5 Show From, To, Cc, Bcc, absolute and relative Date, and a Flags line naming attachments, images, an HTML part, and unread state
+- [x] 8.6 List every attachment with its content type, size, and whether the message referenced it inline
+- [x] 8.7 Add `ui/images.ts`: protocol detection (iTerm2, Kitty, off inside multiplexers) and encoding, with chunking for Kitty
+- [x] 8.8 Fetch image attachments under a size cap as an effect, and render loading, ready, unsupported, oversized, and failed states
+- [x] 8.9 Cap image height to the window so a short terminal shrinks the image instead of dropping it
+- [x] 8.10 Add `clip()` alongside `truncate()`, because collapsing whitespace destroyed header alignment and list indentation
+- [x] 8.11 Unit-test protocol detection and encoding, reader blocks and windowing, the new bindings, and the hint line
+
 ## 7. Gate and documentation
 
 - [x] 7.1 Write `tui/README.md`: install, login, key bindings, query language, and exactly what is stored on disk and how to erase it
@@ -68,6 +82,9 @@
 - `test/integration/worker/mcp.test.ts` now applies migration `0010`. Without it the shared bearer
   verifier cannot read `lastUsedAt` and every MCP request 401s, which is the same ordering the
   migration plan calls out: apply the migration before deploying the Worker.
+- The `MailboxScope` refactor that appeared in the working tree mid-session (`worker/auth/mailbox-access.ts`,
+  `worker/features/messages/conversation-queries.ts` and their call sites) is not part of this change
+  and was left alone; it briefly failed `pnpm typecheck` while in flight and passes now.
 - The commit carries the working tree's pre-existing edits to `worker/routes/index.ts` and
   `worker/features/mcp/route.ts`, because this change edits the same files. The uncommitted
   `revoked IS NULL` check on access tokens was preserved into `worker/auth/oauth-bearer.ts`. Every

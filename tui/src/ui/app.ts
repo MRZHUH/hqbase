@@ -11,10 +11,14 @@ import {
 import { deepSearch, lastSyncKey, syncConversations } from "../sync/sync.js";
 
 import { ansi, colorEnabled } from "./ansi.js";
+import { detectImageProtocol, isDrawableImage } from "./images.js";
 import { decodeKeys } from "./keys.js";
 import { type Effect, type Event, initialModel, type Model } from "./model.js";
 import { update } from "./update.js";
 import { render } from "./view.js";
+
+/** Largest attachment the client will pull down just to draw it. */
+const maxImageBytes = 4 * 1024 * 1024;
 
 export type RunOptions = {
   db: DatabaseSync;
@@ -40,6 +44,7 @@ export async function run(options: RunOptions): Promise<void> {
   }
 
   const color = colorEnabled(output);
+  const protocol = detectImageProtocol(process.env, output.isTTY === true);
   let model: Model = initialModel({
     origin: options.client.origin,
     version: options.version,
@@ -55,7 +60,7 @@ export async function run(options: RunOptions): Promise<void> {
   });
 
   const paint = (): void => {
-    output.write(`${ansi.home}${ansi.clear}${render(model, { color })}`);
+    output.write(`${ansi.home}${ansi.clear}${render(model, { color, protocol })}`);
   };
 
   const dispatch = (event: Event): void => {
@@ -157,6 +162,40 @@ async function runEffect(
       const messages = await options.client.thread(effect.conversationId);
       saveThread(options.db, effect.threadId, messages);
       dispatch({ type: "thread", conversationId: effect.conversationId, messages });
+      return;
+    }
+
+    case "images": {
+      // Bounded on purpose: a mail client should not pull a 30 MB attachment
+      // through the terminal because a thread happened to contain one.
+      for (const attachment of effect.attachments) {
+        if (!isDrawableImage(attachment.contentType)) continue;
+        if (attachment.sizeBytes > maxImageBytes) {
+          dispatch({
+            type: "image",
+            attachmentId: attachment.id,
+            state: { status: "skipped", reason: "too large to display" }
+          });
+          continue;
+        }
+        dispatch({ type: "image", attachmentId: attachment.id, state: { status: "loading" } });
+        void options.client
+          .attachment(attachment.id)
+          .then((image) =>
+            dispatch({
+              type: "image",
+              attachmentId: attachment.id,
+              state: { status: "ready", base64: image.base64, bytes: image.bytes }
+            })
+          )
+          .catch(() =>
+            dispatch({
+              type: "image",
+              attachmentId: attachment.id,
+              state: { status: "skipped", reason: "could not be loaded" }
+            })
+          );
+      }
       return;
     }
 

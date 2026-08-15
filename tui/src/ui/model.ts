@@ -10,6 +10,12 @@ export type Screen = "list" | "reader";
 
 export type Notice = { text: string; kind: "info" | "error" } | null;
 
+/** What the client knows about one image attachment it tried to show. */
+export type ImageState =
+  | { status: "loading" }
+  | { status: "ready"; base64: string; bytes: number }
+  | { status: "skipped"; reason: string };
+
 export type Reader = {
   conversationId: string;
   threadId: string;
@@ -34,6 +40,8 @@ export type Model = {
   offset: number;
   screen: Screen;
   reader: Reader | null;
+  /** Fetched image attachments, keyed by attachment id. */
+  images: Record<string, ImageState>;
   syncing: boolean;
   deepSearching: boolean;
   includesServerResults: boolean;
@@ -54,6 +62,7 @@ export type Event =
   | { type: "deep-search-started" }
   | { type: "deep-search-finished"; found: number }
   | { type: "thread"; conversationId: string; messages: MessageDetail[] }
+  | { type: "image"; attachmentId: string; state: ImageState }
   | { type: "acted"; action: MessageAction }
   | { type: "notice"; text: string; kind: "info" | "error" }
   | { type: "offline"; text: string };
@@ -63,6 +72,7 @@ export type Effect =
   | { type: "deep-search"; search: string }
   | { type: "open"; conversationId: string; threadId: string }
   | { type: "act"; conversationId: string; action: MessageAction; folder: string }
+  | { type: "images"; attachments: Array<{ id: string; contentType: string; sizeBytes: number }> }
   | { type: "reload" }
   | { type: "quit" };
 
@@ -91,6 +101,7 @@ export function initialModel(options: Options): Model {
     offset: 0,
     screen: "list",
     reader: null,
+    images: {},
     syncing: false,
     deepSearching: false,
     includesServerResults: false,
@@ -102,9 +113,12 @@ export function initialModel(options: Options): Model {
   };
 }
 
-/** Rows the list can show, leaving room for the query line, header, and status. */
+/**
+ * Rows the body can show. Four are spoken for: the query line at the top, the
+ * column header, and the status and key-hint lines at the bottom.
+ */
 export function visibleRows(model: Model): number {
-  return Math.max(model.height - 3, 1);
+  return Math.max(model.height - 4, 1);
 }
 
 export function selectedConversation(model: Model): CachedConversation | null {

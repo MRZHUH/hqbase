@@ -9,7 +9,8 @@ archive or star it without leaving the shell.
      FROM                     SUBJECT                                   DATE
  ●@  billing@vendor.example   Invoice 4471                              2h ago
  ●   accounts@vendor.example  Invoice 4470 — corrected                  3d ago
-mail.example.com · you@example.com · 2/318 cached · synced 4m ago · enter open · ctrl+r deep search
+mail.example.com · you@example.com · 2/318 cached · synced 4m ago
+→ open  ·  ← clear  ·  ↑↓ move  ·  type filter  ·  ctrl+r search bodies  ·  ctrl+c quit
 ```
 
 Search runs against a local cache, so it repaints on every keystroke rather than waiting on a
@@ -66,25 +67,73 @@ Every command takes `--origin <url>` to target a workspace other than the one `l
 
 ## Keys
 
+The bottom line of the screen always lists the keys for wherever you are, so
+none of this has to be memorised.
+
 | In the list | |
 | --- | --- |
 | any character | type into the query |
+| `→` / `enter` | open the conversation |
+| `←` / `esc` | clear the query |
 | `↑` `↓` / `ctrl+p` `ctrl+n` | move the selection |
 | `pgup` `pgdn` `home` `end` | page and jump |
-| `enter` | open the conversation |
 | `ctrl+r` | search message bodies on the workspace |
 | `ctrl+s` | sync |
-| `esc` | clear the query |
+| `ctrl+b` `ctrl+f` `ctrl+a` `ctrl+e` | move the cursor inside the query |
 | `ctrl+c` | quit |
 
 | In the reader | |
 | --- | --- |
+| `←` / `q` / `esc` | back to the list, with your search intact |
 | `↑` `↓` `pgup` `pgdn` | scroll |
 | `a` | archive |
 | `s` / `S` | star / unstar |
 | `r` / `u` | mark read / unread |
 | `d` | move to trash |
-| `q` / `esc` | back to the list, with your search intact |
+| `ctrl+c` | quit |
+
+`→` goes in and `←` comes out, so you can move through mail one-handed. The
+arrows do not move the text cursor for that reason; `ctrl+b` / `ctrl+f` and
+`ctrl+a` / `ctrl+e` edit the query the way readline does. `←` in the list clears
+the query rather than quitting — quitting is always `ctrl+c`, so a stray arrow
+cannot end the session.
+
+## Reading a message
+
+The reader shows the full envelope, not a summary:
+
+```
+  Quarterly review
+From:  Alice Green <alice@example.com>
+To:    team@example.com, ops@example.com
+Cc:    manager@example.com
+Date:  2026-08-15 11:00  (2h ago)
+Flags: has attachments · has images · unread
+
+  Numbers for the quarter are attached. Chart below.
+
+Attachments (2)
+  • report.pdf — application/pdf, 1.5 MB
+  • chart.png — image/png, 240 KB, inline
+    <the image, drawn here>
+```
+
+`Cc` and `Bcc` lines appear only when the message carries them. `Flags` names
+whether the message has attachments, has images, has an HTML part that only the
+web app can render, and whether it is still unread.
+
+**Images** are drawn in place when the terminal can draw them — iTerm2, WezTerm,
+Konsole via the iTerm2 protocol, Kitty and Ghostty via the Kitty protocol.
+Anywhere else, and inside `tmux` or `screen` (which mangle the escape
+sequences), the image is described in text instead of being dropped silently:
+
+```
+  • photo.jpg — image/jpeg, 900 KB
+    [image] this terminal cannot display images
+```
+
+Images above 4 MB are not fetched at all and say so. Set `HQBASE_MAIL_IMAGES=off`
+to turn drawing off everywhere and always get the text form.
 
 ## Query language
 

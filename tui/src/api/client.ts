@@ -46,6 +46,7 @@ export type Client = {
   thread(messageId: string): Promise<MessageDetail[]>;
   message(messageId: string): Promise<MessageDetail>;
   act(messageId: string, action: MessageAction, folder: string): Promise<void>;
+  attachment(attachmentId: string): Promise<{ base64: string; bytes: number }>;
 };
 
 export function createClient(initial: Credentials): Client {
@@ -85,6 +86,22 @@ export function createClient(initial: Credentials): Client {
     return (await response.json()) as T;
   }
 
+  async function requestBinary(path: string): Promise<ArrayBuffer> {
+    if (credentials.refreshToken && credentials.expiresAt <= Date.now() + 30_000) {
+      credentials = await refreshAndStore(credentials);
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${credentials.origin}${path}`, {
+        headers: { authorization: `Bearer ${credentials.accessToken}` }
+      });
+    } catch (cause) {
+      throw new OfflineError(cause);
+    }
+    if (!response.ok) throw await readError(response);
+    return response.arrayBuffer();
+  }
+
   return {
     get origin() {
       return credentials.origin;
@@ -99,6 +116,10 @@ export function createClient(initial: Credentials): Client {
       request<MessageDetail[]>(`/api/messages/${encodeURIComponent(messageId)}/thread`),
     message: (messageId) =>
       request<MessageDetail>(`/api/messages/${encodeURIComponent(messageId)}`),
+    attachment: async (attachmentId) => {
+      const buffer = await requestBinary(`/api/attachments/${encodeURIComponent(attachmentId)}`);
+      return { base64: Buffer.from(buffer).toString("base64"), bytes: buffer.byteLength };
+    },
     act: async (messageId, action, folder) => {
       await request<void>(`/api/conversations/${encodeURIComponent(messageId)}/${action}`, {
         method: "POST",

@@ -73,14 +73,24 @@ export function update(model: Model, event: Event, now = Date.now()): [Model, Ef
 
     case "thread": {
       if (model.reader?.conversationId !== event.conversationId) return [model, []];
+      const attachments = event.messages.flatMap((message) =>
+        message.attachments.map((attachment) => ({
+          id: attachment.id,
+          contentType: attachment.contentType,
+          sizeBytes: attachment.sizeBytes
+        }))
+      );
       return [
         {
           ...model,
           reader: { ...model.reader, messages: event.messages, loading: false, scroll: 0 }
         },
-        []
+        attachments.length > 0 ? [{ type: "images", attachments }] : []
       ];
     }
+
+    case "image":
+      return [{ ...model, images: { ...model.images, [event.attachmentId]: event.state } }, []];
 
     case "acted":
       return [
@@ -118,12 +128,19 @@ function listKey(model: Model, key: Key, now: number): [Model, Effect[]] {
   if (key.kind === "home") return [moveSelection(model, -model.results.length), []];
   if (key.kind === "end") return [moveSelection(model, model.results.length), []];
 
-  if (key.kind === "escape") {
-    if (model.query === "") return [model, []];
+  if (key.kind === "escape" || key.kind === "left") {
+    // Left is the way out of wherever you are. In the list the only thing to
+    // leave is the query, and quitting stays on ctrl+c so a stray arrow never
+    // ends the session.
+    if (model.query === "") {
+      return key.kind === "left"
+        ? [withNotice(model, "Nothing to leave. Press ctrl+c to quit.", "info"), []]
+        : [model, []];
+    }
     return [refresh({ ...model, query: "", cursor: 0, selected: 0, offset: 0 }, now), []];
   }
 
-  if (key.kind === "enter") {
+  if (key.kind === "enter" || key.kind === "right") {
     const conversation = selectedConversation(model);
     if (!conversation) return [withNotice(model, "Nothing selected.", "error"), []];
     return [
@@ -172,12 +189,16 @@ function listKey(model: Model, key: Key, now: number): [Model, Effect[]] {
     return [refresh({ ...model, query, selected: 0, offset: 0 }, now), []];
   }
 
-  if (key.kind === "left") {
+  // The arrows open and leave conversations, so editing the query line moves on
+  // the readline keys instead.
+  if (isControl(key, "b")) {
     return [{ ...model, cursor: clamp(model.cursor - 1, 0, model.query.length) }, []];
   }
-  if (key.kind === "right") {
+  if (isControl(key, "f")) {
     return [{ ...model, cursor: clamp(model.cursor + 1, 0, model.query.length) }, []];
   }
+  if (isControl(key, "a")) return [{ ...model, cursor: 0 }, []];
+  if (isControl(key, "e")) return [{ ...model, cursor: model.query.length }, []];
 
   if (key.kind === "char") {
     const query = model.query.slice(0, model.cursor) + key.value + model.query.slice(model.cursor);
@@ -195,7 +216,7 @@ function readerKey(model: Model, key: Key): [Model, Effect[]] {
   if (!reader) return [{ ...model, screen: "list" }, []];
 
   if (key.kind === "quit") return [{ ...model, quitting: true }, [{ type: "quit" }]];
-  if (key.kind === "escape" || (key.kind === "char" && key.value === "q")) {
+  if (key.kind === "escape" || key.kind === "left" || (key.kind === "char" && key.value === "q")) {
     // The query, selection, and scroll offset are untouched, so leaving the
     // reader returns to exactly the search that opened it.
     return [{ ...model, screen: "list", reader: null }, []];
