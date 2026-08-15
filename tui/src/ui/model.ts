@@ -8,6 +8,25 @@ import type { Key } from "./keys.js";
 
 export type Screen = "list" | "reader";
 
+/** An entry in the action menu the list opens on enter. */
+export type MenuAction = "read" | "unread" | "trash";
+
+export type MenuItem = {
+  action: MenuAction;
+  label: string;
+};
+
+export const menuItems: readonly MenuItem[] = [
+  { action: "read", label: "Mark as read" },
+  { action: "trash", label: "Delete (move to trash)" },
+  { action: "unread", label: "Mark as unread" }
+];
+
+/** An overlay awaiting a decision: per-conversation actions, or a confirmation. */
+export type Overlay =
+  | { kind: "actions"; conversationId: string; subject: string; selected: number }
+  | { kind: "confirm-all-read"; count: number };
+
 export type Notice = { text: string; kind: "info" | "error" } | null;
 
 /** What the client knows about one image attachment it tried to show. */
@@ -40,6 +59,7 @@ export type Model = {
   offset: number;
   screen: Screen;
   reader: Reader | null;
+  overlay: Overlay | null;
   /** Fetched image attachments, keyed by attachment id. */
   images: Record<string, ImageState>;
   syncing: boolean;
@@ -64,6 +84,7 @@ export type Event =
   | { type: "thread"; conversationId: string; messages: MessageDetail[] }
   | { type: "image"; attachmentId: string; state: ImageState }
   | { type: "acted"; action: MessageAction }
+  | { type: "marked-all-read"; count: number }
   | { type: "notice"; text: string; kind: "info" | "error" }
   | { type: "offline"; text: string };
 
@@ -74,6 +95,7 @@ export type Effect =
   | { type: "act"; conversationId: string; action: MessageAction; folder: string }
   | { type: "images"; attachments: Array<{ id: string; contentType: string; sizeBytes: number }> }
   | { type: "reload" }
+  | { type: "mark-all-read"; conversationIds: string[]; folder: string }
   | { type: "quit" };
 
 export type Options = {
@@ -101,6 +123,7 @@ export function initialModel(options: Options): Model {
     offset: 0,
     screen: "list",
     reader: null,
+    overlay: null,
     images: {},
     syncing: false,
     deepSearching: false,

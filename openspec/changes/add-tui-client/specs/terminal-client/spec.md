@@ -218,6 +218,122 @@ user is in, so mail can be moved through one-handed. Neither arrow SHALL quit th
 - **THEN** the cursor responds to the readline bindings for back, forward, start of line, and end of
   line, because the arrows are spoken for
 
+### Requirement: The interface is measured in terminal columns
+
+Every line the interface draws SHALL be measured in the columns a terminal renders, not in string
+length, and SHALL leave the last column of the terminal unused.
+
+#### Scenario: Wide characters are measured as they render
+
+- **WHEN** a conversation's subject, sender, or body contains characters a terminal draws two cells
+  wide, such as Chinese, Japanese, or Korean text
+- **THEN** the row still occupies the same number of columns as every other row, and does not wrap
+
+#### Scenario: No line reaches the last column
+
+- **WHEN** any frame is drawn at any terminal width
+- **THEN** every line stops at least one column short of the terminal's width, so a styled line
+  cannot put the terminal into a wrap that would bleed the selection's background onto the next
+  line or push the frame off screen
+
+#### Scenario: A wide character is never split
+
+- **WHEN** text has to be cut to fit a column budget
+- **THEN** the cut falls between characters, never through one
+
+#### Scenario: Alignment holds on any terminal
+
+- **WHEN** the interface draws a bordered box
+- **THEN** every line of that box is the same width, whether or not the terminal renders East Asian
+  Ambiguous characters as two columns
+
+### Requirement: Read and unread conversations are visually distinct
+
+The list SHALL distinguish conversations that have unread messages from those that do not, without
+relying on the reader being opened.
+
+#### Scenario: Unread and read rows are rendered differently
+
+- **WHEN** the list contains both unread and read conversations and the terminal supports styling
+- **THEN** unread rows are emphasised and read rows are muted
+
+#### Scenario: The selection and the read state are both visible
+
+- **WHEN** the selected row is also unread
+- **THEN** both the selection and the unread emphasis are visible on that row at once
+
+#### Scenario: Read state survives without colour
+
+- **WHEN** styling is disabled
+- **THEN** the flag column still marks which conversations are unread
+
+### Requirement: Conversations can be acted on without being opened
+
+Selecting a conversation and pressing enter SHALL offer a menu of actions that apply to it directly,
+so triage does not require reading each message.
+
+#### Scenario: The menu offers the triage actions
+
+- **WHEN** the user presses enter on a selected conversation
+- **THEN** a menu appears naming that conversation and offering to mark it read, delete it, and mark
+  it unread
+
+#### Scenario: Opening and acting are separate keys
+
+- **WHEN** the user presses the right arrow instead
+- **THEN** the conversation opens for reading and no menu appears
+
+#### Scenario: An entry can be chosen by position or by number
+
+- **WHEN** the menu is open
+- **THEN** the arrows move between entries and the digit beside an entry selects it directly
+
+#### Scenario: The menu holds the keyboard while it is open
+
+- **WHEN** the user types an ordinary character while the menu is open
+- **THEN** it does not reach the query line and does not apply an action
+
+#### Scenario: Cancelling changes nothing
+
+- **WHEN** the user cancels the menu
+- **THEN** it closes, no action is sent to the workspace, and the query and selection are unchanged
+
+#### Scenario: A read-only connection cannot open it
+
+- **WHEN** the connection lacks permission to change message state
+- **THEN** the menu does not open and the client says the connection is read-only
+
+### Requirement: Everything listed can be marked read at once
+
+The client SHALL offer a single binding that marks every conversation currently listed as read, and
+SHALL confirm before applying it.
+
+#### Scenario: The scope is what the query has narrowed to
+
+- **WHEN** the user invokes it while a query is narrowing the list
+- **THEN** only the conversations that query lists are affected, not the whole mailbox
+
+#### Scenario: It confirms before changing anything
+
+- **WHEN** the user invokes it
+- **THEN** the client states how many conversations would be marked and waits for an explicit
+  confirmation, changing nothing until then
+
+#### Scenario: Cancelling changes nothing
+
+- **WHEN** the user cancels the confirmation
+- **THEN** no conversation is marked and the workspace receives no request
+
+#### Scenario: Already-read conversations are noticed
+
+- **WHEN** everything currently listed is already read
+- **THEN** the client says so and does not ask for a confirmation
+
+#### Scenario: The result is reported
+
+- **WHEN** the operation completes
+- **THEN** the client reports how many conversations it actually marked
+
 ### Requirement: The client reads a conversation as a thread
 
 Selecting a conversation SHALL open a reader showing the thread's messages in chronological order

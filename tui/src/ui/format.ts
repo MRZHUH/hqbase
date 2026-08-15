@@ -1,5 +1,7 @@
 import type { CachedConversation } from "../store/cache.js";
 
+import { displayWidth, padColumns, sliceColumns } from "./width.js";
+
 export type Columns = {
   flags: number;
   from: number;
@@ -12,9 +14,22 @@ export type Columns = {
  * subject and the subject before the date. A very narrow terminal keeps the
  * subject and the flags, because those are what identify a row.
  */
+/**
+ * Columns available to a frame line.
+ *
+ * One column is always left unused. A styled line that reaches the last column
+ * puts the terminal into deferred wrap, and the next newline then bleeds the
+ * selected row's background onto the following line and scrolls the frame.
+ */
+export function usableWidth(width: number): number {
+  return Math.max(width - 1, 20);
+}
+
 export function layout(width: number): Columns {
-  const usable = Math.max(width, 20);
-  const flags = 4;
+  const usable = usableWidth(width);
+  // Six columns, not four: the unread dot and the star are East Asian Ambiguous
+  // and are reserved two columns each, so all four markers together need six.
+  const flags = 6;
   const date = usable >= 60 ? 12 : 0;
   const from = usable >= 80 ? 24 : usable >= 60 ? 18 : 0;
   const gaps = [flags, from, date].filter((size) => size > 0).length;
@@ -105,7 +120,7 @@ export function formatBytes(bytes: number): string {
 
 export function pad(value: string, width: number): string {
   if (width <= 0) return "";
-  return truncate(value, width).padEnd(width, " ");
+  return padColumns(truncate(value, width), width);
 }
 
 /**
@@ -116,18 +131,19 @@ export function pad(value: string, width: number): string {
  * indentation of an attachment list.
  */
 export function clip(value: string, width: number): string {
-  if (value.length <= width) return value;
-  if (width <= 1) return value.slice(0, Math.max(width, 0));
-  return `${value.slice(0, width - 1)}…`;
+  if (displayWidth(value) <= width) return value;
+  if (width <= 1) return sliceColumns(value, Math.max(width, 0));
+  // The ellipsis is East Asian Ambiguous, so it is counted as two columns and
+  // the text is cut to leave room for it.
+  return `${sliceColumns(value, width - 2)}…`;
 }
 
 export function truncate(value: string, width: number): string {
   const flattened = value.replace(/\s+/g, " ").trim();
-  if (flattened.length <= width) return flattened;
-  if (width <= 1) return flattened.slice(0, width);
-  return `${flattened.slice(0, width - 1)}…`;
+  return clip(flattened, width);
 }
 
+/** Wraps on display columns, so a line of ideographs still fits the terminal. */
 export function wrap(text: string, width: number): string[] {
   const lines: string[] = [];
   for (const paragraph of text.split(/\r?\n/)) {
@@ -137,17 +153,19 @@ export function wrap(text: string, width: number): string[] {
     }
     let current = "";
     for (const word of paragraph.split(/\s+/)) {
-      if (current === "") {
-        current = word;
-      } else if (`${current} ${word}`.length <= width) {
-        current = `${current} ${word}`;
-      } else {
-        lines.push(current);
-        current = word;
+      const candidate = current === "" ? word : `${current} ${word}`;
+      if (displayWidth(candidate) <= width) {
+        current = candidate;
+        continue;
       }
-      while (current.length > width) {
-        lines.push(current.slice(0, width));
-        current = current.slice(width);
+      if (current !== "") lines.push(current);
+      current = word;
+      // A single word wider than the line, such as a run of ideographs or a
+      // long URL, is broken on column boundaries rather than left to overflow.
+      while (displayWidth(current) > width) {
+        const head = sliceColumns(current, width);
+        lines.push(head);
+        current = current.slice(head.length);
       }
     }
     lines.push(current);

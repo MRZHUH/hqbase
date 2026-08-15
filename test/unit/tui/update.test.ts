@@ -148,14 +148,14 @@ describe("deep search", () => {
 
 describe("reading a conversation", () => {
   it("opens the selected conversation and asks for its thread", () => {
-    const [model, effects] = press(start(), { kind: "enter" });
+    const [model, effects] = press(start(), { kind: "right" });
     expect(model.screen).toBe("reader");
     expect(effects).toEqual([{ type: "open", conversationId: "c1", threadId: "thr_c1" }]);
   });
 
   it("keeps the query and the selection when returning", () => {
     let model = type(start(), "invoice");
-    [model] = press(model, { kind: "enter" });
+    [model] = press(model, { kind: "right" });
     [model] = press(model, { kind: "escape" });
     expect(model.screen).toBe("list");
     expect(model.query).toBe("invoice");
@@ -163,7 +163,7 @@ describe("reading a conversation", () => {
   });
 
   it("ignores a thread that arrives for a conversation no longer open", () => {
-    const [opened] = press(start(), { kind: "enter" });
+    const [opened] = press(start(), { kind: "right" });
     const [model] = update(
       opened,
       { type: "thread", conversationId: "other", messages: [message()] },
@@ -175,7 +175,7 @@ describe("reading a conversation", () => {
 
 describe("actions", () => {
   it("asks the workspace to apply an action from the reader", () => {
-    const [opened] = press(start(), { kind: "enter" });
+    const [opened] = press(start(), { kind: "right" });
     const [, effects] = press(opened, { kind: "char", value: "a" });
     expect(effects).toEqual([
       { type: "act", conversationId: "c1", action: "archive", folder: "inbox" }
@@ -183,14 +183,14 @@ describe("actions", () => {
   });
 
   it("explains a read-only connection instead of acting", () => {
-    const [opened] = press(start({ canWrite: false }), { kind: "enter" });
+    const [opened] = press(start({ canWrite: false }), { kind: "right" });
     const [model, effects] = press(opened, { kind: "char", value: "a" });
     expect(effects).toEqual([]);
     expect(model.notice?.text).toContain("read-only");
   });
 
   it("refuses an action while the workspace is unreachable", () => {
-    const [opened] = press(start(), { kind: "enter" });
+    const [opened] = press(start(), { kind: "right" });
     const [offline] = update(opened, { type: "offline", text: "unreachable" }, now);
     const [model, effects] = press(offline, { kind: "char", value: "a" });
     expect(effects).toEqual([]);

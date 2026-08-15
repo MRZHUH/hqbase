@@ -3,6 +3,7 @@ import {
   flags,
   headerRow,
   layout,
+  pad,
   relativeTime,
   sender,
   truncate,
@@ -10,6 +11,7 @@ import {
 } from "@tui/ui/format";
 
 import { decodeKeys, isControl } from "@tui/ui/keys";
+import { displayWidth } from "@tui/ui/width";
 import { describe, expect, it } from "vitest";
 
 import { conversation, now } from "./fixtures";
@@ -23,22 +25,47 @@ describe("layout", () => {
   });
 
   it("drops the sender before the date", () => {
-    expect(layout(70).from).toBe(18);
     expect(layout(50).from).toBe(0);
     expect(layout(50).date).toBe(0);
+  });
+
+  it("reserves enough columns for every flag marker at once", () => {
+    const columns = layout(100);
+    const all = flags(
+      conversation({
+        id: "c",
+        unreadCount: 1,
+        isStarred: true,
+        hasAttachments: true,
+        messageCount: 3
+      })
+    );
+    expect(displayWidth(all)).toBeLessThanOrEqual(columns.flags);
+    expect(pad(all, columns.flags)).not.toContain("…");
   });
 
   it("always leaves room for the subject", () => {
     expect(layout(10).subject).toBeGreaterThanOrEqual(8);
   });
 
-  it("never renders a row wider than the terminal", () => {
+  it("leaves the last column unused so a styled row cannot wrap", () => {
     for (const width of [20, 40, 60, 80, 120]) {
       const columns = layout(width);
       const row = conversationRow(conversation({ id: "c" }), columns, now);
-      expect(row.length).toBeLessThanOrEqual(Math.max(width, 20));
-      expect(headerRow(columns).length).toBe(row.length);
+      expect(displayWidth(row)).toBeLessThan(Math.max(width, 21));
+      expect(displayWidth(headerRow(columns))).toBe(displayWidth(row));
     }
+  });
+
+  it("measures a CJK subject in columns, not characters", () => {
+    const columns = layout(80);
+    const row = conversationRow(
+      conversation({ id: "c", subject: "第一封邮件的中文标题很长很长很长很长" }),
+      columns,
+      now
+    );
+    expect(displayWidth(row)).toBe(displayWidth(headerRow(columns)));
+    expect(row.length).toBeLessThan(displayWidth(row));
   });
 });
 
@@ -87,8 +114,16 @@ describe("relativeTime", () => {
 
 describe("truncate and wrap", () => {
   it("ellipsizes rather than overflowing", () => {
-    expect(truncate("abcdefgh", 4)).toBe("abc…");
+    // The ellipsis is East Asian Ambiguous and is reserved two columns.
+    expect(truncate("abcdefgh", 4)).toBe("ab…");
+    expect(displayWidth(truncate("abcdefgh", 4))).toBeLessThanOrEqual(4);
     expect(truncate("abc", 10)).toBe("abc");
+  });
+
+  it("never cuts a wide character in half", () => {
+    const cut = truncate("中文标题很长", 5);
+    expect(displayWidth(cut)).toBeLessThanOrEqual(5);
+    expect(cut).not.toContain("\ufffd");
   });
 
   it("collapses whitespace so a row stays one line", () => {

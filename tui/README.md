@@ -1,8 +1,8 @@
 # hqbase-mail
 
-`hqbase-mail` is a terminal client for an HQBase workspace: type an instance of what you remember
-about a message and the matching conversations narrow as you type, open one to read the thread, and
-archive or star it without leaving the shell.
+`hqbase-mail` is a terminal client for an HQBase workspace: type what you remember about a message
+and the matching conversations narrow as you type, open one to read the thread, and triage it
+without leaving the shell.
 
 ```
 > invoice is:unread
@@ -10,7 +10,7 @@ archive or star it without leaving the shell.
  ●@  billing@vendor.example   Invoice 4471                              2h ago
  ●   accounts@vendor.example  Invoice 4470 — corrected                  3d ago
 mail.example.com · you@example.com · 2/318 cached · synced 4m ago
-→ open  ·  ← clear  ·  ↑↓ move  ·  type filter  ·  ctrl+r search bodies  ·  ctrl+c quit
+→ read  ·  enter actions  ·  ← clear  ·  ↑↓ move  ·  ctrl+u all read  ·  ctrl+c quit
 ```
 
 Search runs against a local cache, so it repaints on every keystroke rather than waiting on a
@@ -73,14 +73,23 @@ none of this has to be memorised.
 | In the list | |
 | --- | --- |
 | any character | type into the query |
-| `→` / `enter` | open the conversation |
+| `→` | open the conversation and read it |
+| `enter` | act on the conversation without opening it |
 | `←` / `esc` | clear the query |
 | `↑` `↓` / `ctrl+p` `ctrl+n` | move the selection |
 | `pgup` `pgdn` `home` `end` | page and jump |
+| `ctrl+u` | mark everything listed as read |
 | `ctrl+r` | search message bodies on the workspace |
 | `ctrl+s` | sync |
-| `ctrl+b` `ctrl+f` `ctrl+a` `ctrl+e` | move the cursor inside the query |
+| `ctrl+b` `ctrl+f` | move the cursor inside the query |
 | `ctrl+c` | quit |
+
+| In a menu | |
+| --- | --- |
+| `↑` `↓` | move between entries |
+| `1` … `3` | pick an entry directly |
+| `enter` | apply |
+| `←` / `esc` / `q` | cancel |
 
 | In the reader | |
 | --- | --- |
@@ -93,10 +102,38 @@ none of this has to be memorised.
 | `ctrl+c` | quit |
 
 `→` goes in and `←` comes out, so you can move through mail one-handed. The
-arrows do not move the text cursor for that reason; `ctrl+b` / `ctrl+f` and
-`ctrl+a` / `ctrl+e` edit the query the way readline does. `←` in the list clears
-the query rather than quitting — quitting is always `ctrl+c`, so a stray arrow
-cannot end the session.
+arrows do not move the text cursor for that reason; `ctrl+b` / `ctrl+f` edit the
+query the way readline does. `←` in the list clears the query rather than
+quitting — quitting is always `ctrl+c`, so a stray arrow cannot end the session.
+
+## Triage without opening anything
+
+`enter` on a selected conversation opens a small menu:
+
+```
++------------------------------------------------------+
+| Invoice 4471                                         |
+|                                                      |
+| 1. Mark as read                                      |
+| 2. Delete (move to trash)                            |
+| 3. Mark as unread                                    |
+|                                                      |
+| up/down  move      enter  apply      esc  cancel     |
++------------------------------------------------------+
+```
+
+Pick with the arrows or by number. The menu is modal: while it is up, keys go to
+it and not to the query line, so a keystroke aimed at your search cannot apply an
+action by accident.
+
+`ctrl+u` marks **everything currently listed** as read — which is whatever your
+query has narrowed the list to, not the whole mailbox. It asks first, and says
+how many it changed. Space is deliberately not bound to any of this: it has to
+stay a query character, or multi-term searches would be impossible.
+
+Unread conversations are **bold**, read ones are dimmed, and starred ones are
+tinted, so read state is visible without reading the flag column. With `NO_COLOR`
+set or on a pipe, the flag column still marks unread with `●`.
 
 ## Reading a message
 
@@ -180,3 +217,10 @@ pnpm vitest run --config vitest.config.ts test/unit/tui
 The interface is a pure `update(model, event) → [model, effects]` reducer with a pure
 `render(model) → string`; `src/ui/app.ts` is the only module that touches the terminal. Tests drive
 the reducer directly and assert on rendered frames, so none of them needs a pseudo-terminal.
+
+`src/ui/width.ts` measures strings in terminal **columns**, not JavaScript characters. Every frame
+line is built against that measure and is kept one column short of the terminal, because a styled
+line that reaches the last column makes the terminal wrap, which bleeds the selected row's
+background onto the next line and pushes the frame off screen. East Asian Ambiguous characters are
+reserved two columns: over-reserving wastes a column, under-reserving corrupts the frame. Anything
+that has to line up — the menu box — is drawn with ASCII, which is the same width everywhere.

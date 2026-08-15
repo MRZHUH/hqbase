@@ -2,6 +2,7 @@ import type { MessageDetail } from "@tui/api/types";
 import { initialModel, type Model, refresh } from "@tui/ui/model";
 import { update } from "@tui/ui/update";
 import { render } from "@tui/ui/view";
+import { displayWidth } from "@tui/ui/width";
 import { describe, expect, it } from "vitest";
 
 import { now, sample } from "./fixtures";
@@ -35,7 +36,7 @@ describe("render", () => {
     const lines = frame(model({ query: "invoice" })).split("\n");
     expect(lines[0]).toContain("invoice");
     expect(lines.at(-2)).toContain("mail.example.com");
-    expect(lines.at(-1)).toContain("open");
+    expect(lines.at(-1)).toContain("read");
   });
 
   it("always paints exactly as many lines as the terminal is tall", () => {
@@ -150,7 +151,8 @@ describe("render", () => {
   });
 
   it("always ends with a key-hint line", () => {
-    expect(keys(model())).toContain("→ open");
+    expect(keys(model())).toContain("→ read");
+    expect(keys(model())).toContain("enter actions");
     expect(keys(model())).toContain("← clear");
     expect(keys(model())).toContain("ctrl+c quit");
   });
@@ -162,10 +164,17 @@ describe("render", () => {
   });
 
   it("drops whole hints from the tail rather than truncating mid-word", () => {
-    const narrow = keys(model({ width: 24 }));
-    expect(narrow.length).toBeLessThanOrEqual(24);
+    const narrow = keys(model({ width: 34 }));
+    expect(displayWidth(narrow)).toBeLessThan(34);
     expect(narrow).not.toContain("…");
-    expect(narrow).toContain("→ open");
+    expect(narrow).toContain("→ read");
+    expect(narrow).toContain("ctrl+c quit");
+    expect(narrow).not.toContain("search bodies");
+  });
+
+  it("keeps the quit hint even when nothing else fits", () => {
+    const tiny = keys(model({ width: 22 }));
+    expect(tiny).toBe("ctrl+c quit");
   });
 
   it("keeps the key line even when a notice takes over the status line", () => {
@@ -207,7 +216,7 @@ describe("render", () => {
 });
 
 function openReader(state: Model, messages: MessageDetail[]): Model {
-  const [opened] = update(state, { type: "key", key: { kind: "enter" } }, now);
+  const [opened] = update(state, { type: "key", key: { kind: "right" } }, now);
   const [loaded] = update(
     opened,
     { type: "thread", conversationId: opened.reader?.conversationId ?? "", messages },

@@ -1,7 +1,15 @@
-import { type Styles, styling } from "./ansi.js";
-import { clip, conversationRow, headerRow, layout, relativeTime, truncate } from "./format.js";
+import { type SgrName, type Styles, styling } from "./ansi.js";
+import {
+  clip,
+  conversationRow,
+  headerRow,
+  layout,
+  relativeTime,
+  truncate,
+  usableWidth
+} from "./format.js";
 import type { ImageProtocol } from "./images.js";
-import { type Model, visibleRows } from "./model.js";
+import { type Model, menuItems, type Overlay, visibleRows } from "./model.js";
 import {
   type Block,
   imageRows,
@@ -9,6 +17,7 @@ import {
   type ReaderContext,
   windowBlocks
 } from "./reader.js";
+import { displayWidth, padColumns } from "./width.js";
 
 export type RenderOptions = {
   color?: boolean;
@@ -35,8 +44,9 @@ export function render(model: Model, options: RenderOptions = {}): string {
     // capped to what the terminal can actually hold.
     imageHeight: Math.max(1, Math.min(imageRows, visibleRows(model) - 2))
   };
-  const body =
+  const plain =
     model.screen === "reader" ? readerLines(model, context) : listLines(model, styles, now);
+  const body = model.overlay ? overlayLines(model, plain, styles) : plain;
   return [
     queryLine(model, styles),
     ...body,
@@ -65,8 +75,17 @@ function listLines(model: Model, styles: Styles, now: number): string[] {
 
   const window = model.results.slice(model.offset, model.offset + rows);
   for (const [index, result] of window.entries()) {
-    const rendered = conversationRow(result.conversation, columns, now);
-    lines.push(model.offset + index === model.selected ? styles.inverse(rendered) : rendered);
+    const conversation = result.conversation;
+    const rendered = conversationRow(conversation, columns, now);
+    const selected = model.offset + index === model.selected;
+    // Every attribute is applied in one sequence: nesting would emit a reset
+    // partway across the row and drop the selection highlight.
+    const names: SgrName[] = [];
+    if (selected) names.push("inverse");
+    if (conversation.unreadCount > 0) names.push("bold");
+    else names.push("dim");
+    if (conversation.isStarred) names.push("yellow");
+    lines.push(styles.apply(rendered, ...names));
   }
   while (lines.length < rows + 1) lines.push("");
   return lines;
@@ -98,6 +117,59 @@ function readerLines(model: Model, context: ReaderContext): string[] {
   return windowBlocks(blocks, reader.scroll, rows);
 }
 
+/**
+ * Draws the overlay as a box over the bottom of the body, so the list stays
+ * visible behind it and the row being acted on is still on screen.
+ */
+function overlayLines(model: Model, body: readonly string[], styles: Styles): string[] {
+  const overlay = model.overlay;
+  if (!overlay) return [...body];
+
+  const width = Math.min(Math.max(usableWidth(model.width) - 4, 24), 56);
+  const box = overlayBox(overlay, width, styles);
+  const lines = [...body];
+  // Anchored to the bottom of the body so it sits just above the status line.
+  const start = Math.max(lines.length - box.length, 0);
+  for (const [index, text] of box.entries()) {
+    if (start + index < lines.length) lines[start + index] = text;
+  }
+  return lines;
+}
+
+function overlayBox(overlay: Overlay, width: number, styles: Styles): string[] {
+  // ASCII frame characters on purpose. The box-drawing set is East Asian
+  // Ambiguous — one column on a Western terminal, two on a CJK one — so a box
+  // built from it can never line up on both.
+  const rule = `+${"-".repeat(width - 2)}+`;
+  const row = (text: string, names: SgrName[] = []): string => {
+    const inner = padColumns(clip(text, width - 4), width - 4);
+    return `| ${styles.apply(inner, ...names)} |`;
+  };
+
+  if (overlay.kind === "confirm-all-read") {
+    return [
+      rule,
+      row(`Mark ${overlay.count} conversation${overlay.count === 1 ? "" : "s"} as read?`, ["bold"]),
+      row("The workspace applies this immediately."),
+      row(""),
+      row("enter  confirm      esc  cancel", ["dim"]),
+      rule
+    ];
+  }
+
+  return [
+    rule,
+    row(overlay.subject || "(no subject)", ["bold"]),
+    row(""),
+    ...menuItems.map((item, index) =>
+      row(`${index + 1}. ${item.label}`, index === overlay.selected ? ["inverse"] : [])
+    ),
+    row(""),
+    row("up/down  move      enter  apply      esc  cancel", ["dim"]),
+    rule
+  ];
+}
+
 function statusLine(model: Model, styles: Styles, now: number): string {
   if (model.notice) {
     const notice = truncate(model.notice.text, model.width);
@@ -126,7 +198,7 @@ function statusLine(model: Model, styles: Styles, now: number): string {
     parts.push(`unknown filter: ${model.invalidTerms.join(" ")}`);
   }
 
-  return styles.dim(truncate(parts.join(" · "), model.width));
+  return styles.dim(truncate(parts.join(" · "), usableWidth(model.width)));
 }
 
 type Hint = readonly [string, string];
@@ -137,6 +209,24 @@ type Hint = readonly [string, string];
  * narrow terminal drops the tail rather than truncating mid-word.
  */
 function keyLine(model: Model, styles: Styles): string {
+  if (model.overlay) {
+    return styles.dim(
+      fitHints(
+        model.overlay.kind === "confirm-all-read"
+          ? [
+              ["enter", "confirm"],
+              ["esc", "cancel"]
+            ]
+          : [
+              ["↑↓", "move"],
+              ["1-3", "pick"],
+              ["enter", "apply"],
+              ["esc", "cancel"]
+            ],
+        usableWidth(model.width)
+      )
+    );
+  }
   const writeHints: Hint[] = [
     ["a", "archive"],
     ["s/S", "star"],
@@ -153,15 +243,16 @@ function keyLine(model: Model, styles: Styles): string {
           ["ctrl+c", "quit"]
         ]
       : [
-          ["→", "open"],
+          ["→", "read"],
+          ["enter", "actions"],
           ["←", "clear"],
           ["↑↓", "move"],
-          ["type", "filter"],
+          ["ctrl+u", "all read"],
           ["ctrl+r", "search bodies"],
           ["ctrl+s", "sync"],
           ["ctrl+c", "quit"]
         ];
-  return styles.dim(fitHints(hints, model.width));
+  return styles.dim(fitHints(hints, usableWidth(model.width)));
 }
 
 const separator = "  ·  ";
@@ -178,12 +269,16 @@ export function fitHints(hints: ReadonlyArray<Hint>, width: number): string {
   if (hints.length === 0) return "";
   const pinned = hints[hints.length - 1] as Hint;
   const pinnedText = `${pinned[0]} ${pinned[1]}`;
-  if (pinnedText.length >= width) return clip(pinnedText, width);
+  const pinnedWidth = displayWidth(pinnedText);
+  if (pinnedWidth >= width) return clip(pinnedText, width);
 
+  // Measured in columns, because the arrow glyphs and the separator are all
+  // characters a CJK terminal draws two cells wide.
+  const separatorWidth = displayWidth(separator);
   let rendered = "";
   for (const [key, label] of hints.slice(0, -1)) {
     const next = rendered === "" ? `${key} ${label}` : `${rendered}${separator}${key} ${label}`;
-    if (next.length + separator.length + pinnedText.length > width) break;
+    if (displayWidth(next) + separatorWidth + pinnedWidth > width) break;
     rendered = next;
   }
   return rendered === "" ? pinnedText : `${rendered}${separator}${pinnedText}`;

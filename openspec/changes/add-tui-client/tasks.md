@@ -66,6 +66,20 @@
 - [x] 8.10 Add `clip()` alongside `truncate()`, because collapsing whitespace destroyed header alignment and list indentation
 - [x] 8.11 Unit-test protocol detection and encoding, reader blocks and windowing, the new bindings, and the hint line
 
+## 9. Column-correct rendering, colour, and triage actions
+
+- [x] 9.1 Add `tui/src/ui/width.ts`: per-code-point column widths, wide and combining ranges, East Asian Ambiguous reserved at two columns, and escape-aware measurement
+- [x] 9.2 Move `pad`, `clip`, `truncate`, and `wrap` onto display columns, never splitting a wide character
+- [x] 9.3 Reserve the last terminal column in `layout` and every status, hint, and reader line
+- [x] 9.4 Disable autowrap while the alternate screen is active and restore it on exit
+- [x] 9.5 Widen the flag column to six columns so all four ambiguous-width markers fit
+- [x] 9.6 Rewrite `ui/ansi.ts` for composable SGR, so selection and read state apply as one sequence instead of nesting resets
+- [x] 9.7 Render unread rows bold, read rows dim, and starred rows tinted
+- [x] 9.8 Add the action overlay: model state, modal key handling in `ui/overlay.ts`, and an ASCII-framed box
+- [x] 9.9 Bind enter to the action menu, keep the right arrow for reading, and add `ctrl+u` mark-all-read behind a confirmation
+- [x] 9.10 Add the `mark-all-read` effect, applying per conversation and reporting how many succeeded
+- [x] 9.11 Unit-test column arithmetic, CJK rows, box alignment, the menu, the confirmation, and read/unread styling
+
 ## 7. Gate and documentation
 
 - [x] 7.1 Write `tui/README.md`: install, login, key bindings, query language, and exactly what is stored on disk and how to erase it
@@ -82,6 +96,10 @@
 - `test/integration/worker/mcp.test.ts` now applies migration `0010`. Without it the shared bearer
   verifier cannot read `lastUsedAt` and every MCP request 401s, which is the same ordering the
   migration plan calls out: apply the migration before deploying the Worker.
+- Two rendering defects the user hit were real and are fixed in section 9: rows were measured with
+  `String.length`, so any CJK subject overflowed the terminal and wrapped, and every row was exactly
+  the terminal width, which put the terminal into deferred wrap and bled the selected row's
+  background onto the next line.
 - The `MailboxScope` refactor that appeared in the working tree mid-session (`worker/auth/mailbox-access.ts`,
   `worker/features/messages/conversation-queries.ts` and their call sites) is not part of this change
   and was left alone; it briefly failed `pnpm typecheck` while in flight and passes now.

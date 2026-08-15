@@ -84,7 +84,7 @@ export async function run(options: RunOptions): Promise<void> {
     output.off("resize", onResize);
     if (input.isTTY) input.setRawMode(false);
     input.pause();
-    output.write(`${ansi.showCursor}${ansi.leaveAlternateScreen}`);
+    output.write(`${ansi.enableAutowrap}${ansi.showCursor}${ansi.leaveAlternateScreen}`);
   };
 
   function onData(chunk: Buffer | string): void {
@@ -95,7 +95,7 @@ export async function run(options: RunOptions): Promise<void> {
     dispatch({ type: "resize", width: output.columns ?? 100, height: output.rows ?? 30 });
   }
 
-  output.write(`${ansi.enterAlternateScreen}${ansi.hideCursor}`);
+  output.write(`${ansi.enterAlternateScreen}${ansi.hideCursor}${ansi.disableAutowrap}`);
   input.setRawMode(true);
   input.resume();
   input.setEncoding("utf8");
@@ -196,6 +196,25 @@ async function runEffect(
             })
           );
       }
+      return;
+    }
+
+    case "mark-all-read": {
+      // Applied one at a time because the workspace exposes no bulk endpoint.
+      // Failures are counted rather than aborting the run, so one unreachable
+      // conversation does not strand the rest half-marked with no report.
+      let marked = 0;
+      for (const conversationId of effect.conversationIds) {
+        try {
+          await options.client.act(conversationId, "read", effect.folder);
+          marked += 1;
+        } catch {
+          // Counted by omission; the notice reports what actually changed.
+        }
+      }
+      const page = await options.client.conversations({});
+      saveConversations(options.db, page.conversations);
+      dispatch({ type: "marked-all-read", count: marked });
       return;
     }
 

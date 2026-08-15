@@ -13,6 +13,7 @@ import {
   visibleRows,
   withNotice
 } from "./model.js";
+import { overlayKey } from "./overlay.js";
 
 const readerActions: Record<string, MessageAction> = {
   a: "archive",
@@ -111,7 +112,20 @@ export function update(model: Model, event: Event, now = Date.now()): [Model, Ef
         []
       ];
 
+    case "marked-all-read":
+      return [
+        withNotice(
+          { ...model, overlay: null },
+          `Marked ${event.count} conversation${event.count === 1 ? "" : "s"} as read.`,
+          "info"
+        ),
+        [{ type: "reload" }]
+      ];
+
     case "key":
+      // An overlay owns the keyboard while it is up, so a decision cannot be
+      // typed past by accident.
+      if (model.overlay) return overlayKey(model, event.key);
       return model.screen === "reader"
         ? readerKey(model, event.key)
         : listKey(model, event.key, now);
@@ -140,7 +154,49 @@ function listKey(model: Model, key: Key, now: number): [Model, Effect[]] {
     return [refresh({ ...model, query: "", cursor: 0, selected: 0, offset: 0 }, now), []];
   }
 
-  if (key.kind === "enter" || key.kind === "right") {
+  if (key.kind === "enter") {
+    const conversation = selectedConversation(model);
+    if (!conversation) return [withNotice(model, "Nothing selected.", "error"), []];
+    if (!model.canWrite) {
+      return [
+        withNotice(model, "This connection is read-only. Run: hqbase-mail login --write", "error"),
+        []
+      ];
+    }
+    return [
+      {
+        ...model,
+        overlay: {
+          kind: "actions",
+          conversationId: conversation.id,
+          subject: conversation.subject,
+          selected: 0
+        }
+      },
+      []
+    ];
+  }
+
+  if (isControl(key, "u")) {
+    if (model.results.length === 0) {
+      return [withNotice(model, "Nothing listed to mark.", "error"), []];
+    }
+    if (!model.canWrite) {
+      return [
+        withNotice(model, "This connection is read-only. Run: hqbase-mail login --write", "error"),
+        []
+      ];
+    }
+    const unread = model.results.filter((result) => result.conversation.unreadCount > 0);
+    if (unread.length === 0) {
+      return [withNotice(model, "Everything listed is already read.", "info"), []];
+    }
+    // Bulk state changes confirm first: this is one keystroke away from a common
+    // multiplexer prefix, and there is no undo on the workspace side.
+    return [{ ...model, overlay: { kind: "confirm-all-read", count: unread.length } }, []];
+  }
+
+  if (key.kind === "right") {
     const conversation = selectedConversation(model);
     if (!conversation) return [withNotice(model, "Nothing selected.", "error"), []];
     return [
