@@ -20,6 +20,7 @@ export const settingsTabs = [
   "users",
   "domains",
   "notifications",
+  "applications",
   "updates",
   "debug"
 ] as const;

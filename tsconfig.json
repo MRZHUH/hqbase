@@ -22,7 +22,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["app/*"],
-      "@worker/*": ["worker/*"]
+      "@worker/*": ["worker/*"],
+      "@tui/*": ["tui/src/*"]
     },
     "types": ["@cloudflare/vitest-pool-workers/types", "vite/client", "vitest/globals", "node"]
   },

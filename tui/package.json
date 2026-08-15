@@ -1,0 +1,25 @@
+{
+  "name": "@hqbase/tui",
+  "version": "1.0.1",
+  "private": true,
+  "description": "Terminal client for an HQBase workspace.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "hqbase-mail": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "typescript": "^5.8.3"
+  }
+}

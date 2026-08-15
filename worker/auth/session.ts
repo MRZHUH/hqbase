@@ -4,8 +4,9 @@ import type { WorkerEnv } from "../lib/env";
 import { AppError } from "../lib/errors";
 import type { WorkspaceRole } from "../lib/validation";
 import { parseWith, workspaceRoleSchema } from "../lib/validation";
-
-import { createAuth } from "./auth";
+import { apiScopes } from "./api-scope";
+import { apiResource, createAuth } from "./auth";
+import { verifyOAuthBearer } from "./oauth-bearer";
 import { isPasswordSetupRequired } from "./password-setup";
 
 const betterSessionSchema = z.object({
@@ -40,6 +41,9 @@ export async function getAuthContext(
   env: WorkerEnv,
   request: Request
 ): Promise<AuthContext | null> {
+  const bearer = await bearerAuthContext(env, request);
+  if (bearer) return bearer;
+
   const auth = createAuth(env, request);
   const rawSession = await auth.api.getSession({
     headers: request.headers
@@ -81,6 +85,35 @@ export async function requireAuthContext(
     );
   }
   return authContext;
+}
+
+/**
+ * Resolves an access token bound to the API resource into the same context a
+ * browser session produces, so every mailbox grant, role check, and audit entry
+ * downstream behaves identically for both credential kinds. Which routes a token
+ * may reach is decided upstream by the scope middleware, never here.
+ */
+async function bearerAuthContext(env: WorkerEnv, request: Request): Promise<AuthContext | null> {
+  const principal = await verifyOAuthBearer(env, request, {
+    resource: apiResource(env, request),
+    allowedScopes: apiScopes
+  });
+  if (!principal) return null;
+  return {
+    session: {
+      // Marked so audit readers can tell an application's action from a
+      // person's, and so it can never collide with a better-auth session id.
+      id: `oauth:${principal.tokenId}`,
+      userId: principal.userId,
+      createdAt: new Date(principal.issuedAt)
+    },
+    user: {
+      id: principal.userId,
+      email: principal.email,
+      name: principal.name,
+      role: principal.role
+    }
+  };
 }
 
 export function requireRole(

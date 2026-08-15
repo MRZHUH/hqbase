@@ -8,6 +8,7 @@ import conversationMigration from "../../../migrations/0004_conversations.sql?ra
 import threadRebuildMigration from "../../../migrations/0005_rebuild_threads.sql?raw";
 import userOnboardingMigration from "../../../migrations/0008_user_onboarding.sql?raw";
 import loginEmailDomainMigration from "../../../migrations/0009_login_email_domain_isolation.sql?raw";
+import tokenActivityMigration from "../../../migrations/0010_oauth_token_activity.sql?raw";
 import { hashOAuthToken } from "../../../worker/auth/oauth-token";
 import { migrationStatements } from "./migration-statements";
 
@@ -36,7 +37,8 @@ describe("HQBase MCP server", () => {
       conversationMigration,
       threadRebuildMigration,
       userOnboardingMigration,
-      loginEmailDomainMigration
+      loginEmailDomainMigration,
+      tokenActivityMigration
     ]) {
       await applyMigration(migration);
     }

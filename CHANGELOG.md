@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Add `hqbase-mail`, a terminal client for a workspace, with type-ahead search over a local cache,
+  a thread reader, message actions, and workspace-side body search.
+- Authorize non-browser clients with OAuth authorization code and PKCE against the workspace's own
+  authorization server, and accept those access tokens on the REST API for an explicit allowlist of
+  mail routes, deny-by-default everywhere else.
+- Add Settings › Applications, where a user can see every application they authorized, the scopes it
+  holds, when it was last used, and revoke it.
+
 ## 1.0.1
 
 - Preserve invitation password setup links so `/set-password?token=...` reaches the password form

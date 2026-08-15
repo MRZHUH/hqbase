@@ -4,7 +4,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": new URL("./app", import.meta.url).pathname,
-      "@worker": new URL("./worker", import.meta.url).pathname
+      "@worker": new URL("./worker", import.meta.url).pathname,
+      "@tui": new URL("./tui/src", import.meta.url).pathname
     }
   },
   test: {

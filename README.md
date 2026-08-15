@@ -41,6 +41,22 @@ pnpm dev:setup-ui
 
 Open `http://127.0.0.1:5173/__ui/setup`.
 
+## Terminal client
+
+`tui/` is a terminal client for a workspace: `hqbase-mail` opens a full-screen search over your
+shared mailboxes, reads threads, and triages mail without a browser. It authorizes with OAuth and
+PKCE against the workspace's own authorization server, so no password or shared secret is typed into
+a terminal, and every authorization can be revoked from Settings › Applications.
+
+```sh
+pnpm tui:build
+npm install -g ./tui
+hqbase-mail login https://mail.example.com
+```
+
+See `tui/README.md` for the query language, key bindings, and exactly what the client caches on
+disk.
+
 ## Quality gate
 
 ```sh

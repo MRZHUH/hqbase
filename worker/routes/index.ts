@@ -2,6 +2,7 @@ import { Hono } from "hono";
 
 import { createAuth } from "../auth/auth";
 import { auditRoutes } from "../features/audit/routes";
+import { connectedAppRoutes } from "../features/connected-apps/routes";
 import { domainRoutes } from "../features/domains/routes";
 import { draftRoutes } from "../features/drafts/routes";
 import { mailboxAccessRoutes } from "../features/mailbox-access/routes";
@@ -20,6 +21,7 @@ import { errorBody, toAppError } from "../lib/errors";
 import { jsonResponse } from "../lib/json";
 import { enforceRateLimit } from "../security/rate-limit";
 
+import { enforceBearerScope } from "./bearer";
 import { healthRoutes } from "./health";
 import { meRoutes } from "./me";
 
@@ -36,6 +38,11 @@ apiRoutes.use("*", async (c, next) => {
   c.header("cache-control", "no-store");
 });
 
+// Runs before every route so an application credential can only ever reach the
+// routes the allowlist names. Requests without a bearer token pass through
+// untouched.
+apiRoutes.use("*", enforceBearerScope());
+
 apiRoutes.onError((error, _c) => {
   const appError = toAppError(error);
   return jsonResponse(errorBody(appError.code, appError.message), { status: appError.status });
@@ -49,6 +56,7 @@ apiRoutes.route("/api/health", healthRoutes);
 apiRoutes.route("/api/setup", setupRoutes);
 apiRoutes.route("/api/me", meRoutes);
 apiRoutes.route("/api/audit", auditRoutes);
+apiRoutes.route("/api/connected-apps", connectedAppRoutes);
 apiRoutes.route("/api/domains", domainRoutes);
 apiRoutes.route("/api/drafts", draftRoutes);
 apiRoutes.route("/api/mailbox-grants", mailboxAccessRoutes);
@@ -70,6 +78,19 @@ apiRoutes.all("/api/auth/*", async (c) => {
       errorBody("SIGNUP_DISABLED", "Public signup is disabled. Use setup or admin user creation."),
       403
     );
+  }
+
+  // better-auth's admin plugin exposes owner-equivalent operations (set-role,
+  // set-user-password, ban-user, remove-user, impersonate-user, ...) under
+  // this prefix, gated only by the coarse "admin" ac role, which HQBase's
+  // adminRole intentionally shares with ownerRole. The app-level owner-only
+  // checks (OWNER_REQUIRED, LAST_OWNER) live only in worker/features/users/routes.ts,
+  // so this raw surface must never be reachable directly. HQBase's own admin
+  // flows (create-user, set-user-password) call auth.handler() in-process via
+  // worker/auth/user-actions.ts and never traverse this HTTP route, so blocking
+  // it here does not affect them.
+  if (pathname.startsWith("/api/auth/admin/")) {
+    return c.json(errorBody("FORBIDDEN", "This endpoint is not available directly."), 403);
   }
 
   if (pathname === "/api/auth/sign-in/email" && c.req.method === "POST") {

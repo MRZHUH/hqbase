@@ -22,7 +22,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "code:check": "biome check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && pnpm tui:typecheck",
     "test": "pnpm test:unit && pnpm test:integration",
     "test:unit": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.worker.config.ts",
@@ -42,7 +42,10 @@
     "hqbase:reset": "node scripts/hqbase/cli.mjs reset",
     "hqbase:destroy": "node scripts/hqbase/cli.mjs destroy",
     "cf:typegen": "wrangler types",
-    "release:package": "node scripts/release/package.mjs"
+    "release:package": "node scripts/release/package.mjs",
+    "tui:typecheck": "pnpm --filter @hqbase/tui typecheck",
+    "tui:build": "pnpm --filter @hqbase/tui build",
+    "mail": "pnpm --filter @hqbase/tui build && node tui/dist/cli.js"
   },
   "cloudflare": {
     "bindings": {

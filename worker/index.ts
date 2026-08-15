@@ -4,12 +4,16 @@ import { notifyInboundMessage } from "./features/notifications/delivery";
 import { consumeJobs } from "./jobs/consumer";
 import type { WorkerEnv } from "./lib/env";
 import { apiRoutes } from "./routes";
+import { apiResourceMetadata, apiResourceMetadataPath } from "./routes/bearer";
 
 export default {
   async fetch(request: Request, env: WorkerEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const mcpResponse = await handleMcpRoute(request, env, ctx);
     if (mcpResponse) return mcpResponse;
+    if (url.pathname === apiResourceMetadataPath) {
+      return apiResourceMetadata(env, request);
+    }
     if (url.pathname.startsWith("/api/")) {
       return apiRoutes.fetch(request, env, ctx);
     }

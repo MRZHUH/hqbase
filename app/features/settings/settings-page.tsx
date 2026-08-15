@@ -6,6 +6,7 @@ import { MailboxSettings } from "@/features/mailboxes/mailbox-settings";
 import type { Mailbox } from "@/features/mailboxes/types";
 import { NotificationSettings } from "@/features/notifications/notification-settings";
 import type { NotificationController } from "@/features/notifications/types";
+import { ConnectedAppsSettings } from "@/features/settings/connected-apps-settings";
 import { DebugSettings } from "@/features/settings/debug-settings";
 import { SettingsSection } from "@/features/settings/settings-section";
 import type { SetupStatus } from "@/features/setup/types";
@@ -67,6 +68,7 @@ export function SettingsPage({
             <SettingsTab value="users">Users</SettingsTab>
             {canManage ? <SettingsTab value="domains">Domains</SettingsTab> : null}
             <SettingsTab value="notifications">Notifications</SettingsTab>
+            <SettingsTab value="applications">Applications</SettingsTab>
             {canManage ? <SettingsTab value="updates">Updates</SettingsTab> : null}
             <SettingsTab value="debug">Debug</SettingsTab>
           </TabsList>
@@ -98,6 +100,9 @@ export function SettingsPage({
           ) : null}
           <TabsContent className="mt-5" value="notifications">
             <NotificationSettings notifications={notifications} />
+          </TabsContent>
+          <TabsContent className="mt-5" value="applications">
+            <ConnectedAppsSettings />
           </TabsContent>
           {canManage ? (
             <TabsContent className="mt-5" value="updates">

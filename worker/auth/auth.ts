@@ -75,7 +75,14 @@ export function createAuth(env: WorkerEnv, request: Request) {
         },
         scopes: ["mail:read", "mail:write", "mail:send", "offline_access"],
         storeTokens: { hash: hashOAuthToken },
-        resources: [mcpResource(env, request), mcpFullResource(env, request)],
+        // Each surface is its own resource so a token stays confined to the one
+        // it was issued for. `enforcePerClientResources` is false, so without
+        // distinct identifiers an MCP token would silently become an API token.
+        resources: [
+          mcpResource(env, request),
+          mcpFullResource(env, request),
+          apiResource(env, request)
+        ],
         enforcePerClientResources: false
       })
     ]
@@ -96,4 +103,9 @@ export function mcpResource(env: WorkerEnv, request: Request): string {
 
 export function mcpFullResource(env: WorkerEnv, request: Request): string {
   return `${authOrigin(env, request)}/mcp/full`;
+}
+
+/** Resource identifier for the REST API, distinct from both MCP profiles. */
+export function apiResource(env: WorkerEnv, request: Request): string {
+  return `${authOrigin(env, request)}/api`;
 }

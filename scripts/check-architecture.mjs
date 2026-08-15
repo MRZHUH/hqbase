@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-const roots = ["app", "worker", "scripts"];
+const roots = ["app", "worker", "scripts", "tui/src"];
 const hardLimit = 400;
 const reviewLimit = 300;
 const failures = [];
