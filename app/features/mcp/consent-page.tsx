@@ -73,6 +73,7 @@ export function McpConsentPage(): React.ReactElement {
   }
 
   const clientName = client?.client_name ?? client?.name ?? "MCP client";
+  const clientUri = client?.uri;
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-12">
       <Card className="w-full max-w-md bg-card/70 shadow-none">
@@ -83,6 +84,26 @@ export function McpConsentPage(): React.ReactElement {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          {client ? (
+            <div className="space-y-1 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+              <p className="text-muted-foreground">
+                Anyone can register a client with this display name. Verify the details below match
+                the integration you expect before allowing access.
+              </p>
+              {clientUri ? (
+                <p className="break-all">
+                  Homepage: <span className="font-medium">{clientUri}</span>
+                </p>
+              ) : (
+                <p className="text-amber-600 dark:text-amber-500">
+                  This client registered no homepage URL.
+                </p>
+              )}
+              <p className="break-all font-mono text-[11px] text-muted-foreground">
+                Client ID: {clientId}
+              </p>
+            </div>
+          ) : null}
           {requestedScopes.length > 0 ? (
             <ul className="space-y-2 text-sm">
               {requestedScopes.map((scope) => (
